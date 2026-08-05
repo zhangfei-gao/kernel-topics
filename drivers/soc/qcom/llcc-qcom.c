@@ -4416,6 +4416,15 @@ static const struct qcom_llcc_config hawi_sct_cfg[] = {
 	},
 };
 
+static const struct qcom_llcc_config sa8797p_sct_cfg[] = {
+	{
+		.sct_data	= NULL,
+		.size		= 0,
+		.reg_offset	= llcc_v6_reg_offset,
+		.edac_reg_offset = &llcc_v6_edac_reg_offset,
+	},
+};
+
 static const struct qcom_llcc_config eliza_cfg[] = {
 	{
 		.sct_data	= eliza_data,
@@ -4694,6 +4703,11 @@ static const struct qcom_llcc_config x1e80100_cfg[] = {
 static const struct qcom_sct_config hawi_sct_cfgs = {
 	.llcc_config	= hawi_sct_cfg,
 	.num_config	= ARRAY_SIZE(hawi_sct_cfg),
+};
+
+static const struct qcom_sct_config sa8797p_sct_cfgs = {
+	.llcc_config	= sa8797p_sct_cfg,
+	.num_config	= ARRAY_SIZE(sa8797p_sct_cfg),
 };
 
 static const struct qcom_sct_config eliza_cfgs = {
@@ -5653,6 +5667,7 @@ static const struct of_device_id qcom_llcc_of_match[] = {
 	{ .compatible = "qcom,qcs8300-llcc", .data = &qcs8300_cfgs},
 	{ .compatible = "qcom,qdu1000-llcc", .data = &qdu1000_cfgs},
 	{ .compatible = "qcom,sa8775p-llcc", .data = &sa8775p_cfgs },
+	{ .compatible = "qcom,sa8797p-llcc", .data = &sa8797p_sct_cfgs },
 	{ .compatible = "qcom,sar1130p-llcc", .data = &sar1130p_cfgs },
 	{ .compatible = "qcom,sar2130p-llcc", .data = &sar2130p_cfgs },
 	{ .compatible = "qcom,sc7180-llcc", .data = &sc7180_cfgs },
