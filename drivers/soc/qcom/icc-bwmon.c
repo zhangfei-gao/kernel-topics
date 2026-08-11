@@ -6,16 +6,19 @@
  *         previous work of Thara Gopinath and msm-4.9 downstream sources.
  */
 
+#include <linux/debugfs.h>
 #include <linux/err.h>
 #include <linux/interconnect.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
+#include <linux/irq.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/pm_opp.h>
 #include <linux/regmap.h>
+#include <linux/seq_file.h>
 #include <linux/sizes.h>
 #define CREATE_TRACE_POINTS
 #include "trace_icc-bwmon.h"
@@ -77,6 +80,14 @@
 
 #define BWMON_V4_SAMPLE_WINDOW			0x2a8
 #define BWMON_V5_SAMPLE_WINDOW			0x020
+
+/*
+ * Raw offsets (not wired up as regmap fields) used only for the debugfs
+ * live-readback dump.
+ */
+#define BWMON_V5_BYTE_COUNT			0x038
+#define BWMON_V5_WINDOW_TIMER			0x03c
+#define BWMON_V5_ZONE_COUNT_RAW			0x040
 
 #define BWMON_V4_THRESHOLD_HIGH			0x2ac
 #define BWMON_V4_THRESHOLD_MED			0x2b0
@@ -208,6 +219,10 @@ struct icc_bwmon {
 
 	struct regmap_field *regs[F_NUM_FIELDS];
 	struct regmap_field *global_regs[F_NUM_GLOBAL_FIELDS];
+
+	/* Raw MMIO base, for the debugfs live-readback dump only. */
+	void __iomem *base;
+	struct dentry *debugfs_dir;
 
 	unsigned int max_bw_kbps;
 	unsigned int min_bw_kbps;
@@ -853,6 +868,8 @@ static int bwmon_init_regmap(struct platform_device *pdev,
 		return dev_err_probe(dev, PTR_ERR(base),
 				     "failed to map bwmon registers\n");
 
+	bwmon->base = base;
+
 	map = devm_regmap_init_mmio(dev, base, bwmon->data->regmap_cfg);
 	if (IS_ERR(map))
 		return dev_err_probe(dev, PTR_ERR(map),
@@ -886,10 +903,81 @@ static int bwmon_init_regmap(struct platform_device *pdev,
 		ret = devm_regmap_field_bulk_alloc(dev, map, bwmon->global_regs,
 						   bwmon->data->global_regmap_fields,
 						   F_NUM_GLOBAL_FIELDS);
+		if (ret)
+			return ret;
 	}
 
-	return ret;
+	return 0;
 }
+
+/*
+ * Live readback of the LAGG registers, for diagnosing issues that aren't
+ * visible from the normal regmap-cached fields (e.g. free-running counters).
+ */
+static int bwmon_debug_regs_show(struct seq_file *s, void *unused)
+{
+	struct icc_bwmon *bwmon = s->private;
+
+	seq_printf(s, "lagg ENABLE=0x%x BYTE_COUNT=0x%x WINDOW_TIMER=0x%x\n",
+		   readl(bwmon->base + BWMON_V5_ENABLE),
+		   readl(bwmon->base + BWMON_V5_BYTE_COUNT),
+		   readl(bwmon->base + BWMON_V5_WINDOW_TIMER));
+
+	seq_printf(s, "lagg IRQ_STATUS=0x%x IRQ_ENABLE=0x%x ZONE_COUNT=0x%x ZONE_COUNT_THRESHOLD=0x%x ZONE_ACTIONS=0x%x\n",
+		   readl(bwmon->base + BWMON_V5_IRQ_STATUS),
+		   readl(bwmon->base + BWMON_V5_IRQ_ENABLE),
+		   readl(bwmon->base + BWMON_V5_ZONE_COUNT_RAW),
+		   readl(bwmon->base + BWMON_V5_THRESHOLD_COUNT),
+		   readl(bwmon->base + BWMON_V5_ZONE_ACTIONS));
+
+	{
+		bool pending = false, active = false, masked = false;
+		int ret;
+
+		ret = irq_get_irqchip_state(bwmon->irq, IRQCHIP_STATE_PENDING, &pending);
+		if (!ret)
+			ret = irq_get_irqchip_state(bwmon->irq, IRQCHIP_STATE_ACTIVE, &active);
+		if (!ret)
+			ret = irq_get_irqchip_state(bwmon->irq, IRQCHIP_STATE_MASKED, &masked);
+
+		if (!ret)
+			seq_printf(s, "irq %d: pending=%d active=%d masked=%d\n",
+				   bwmon->irq, pending, active, masked);
+		else
+			seq_printf(s, "irq %d: irq_get_irqchip_state failed (%d)\n",
+				   bwmon->irq, ret);
+	}
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(bwmon_debug_regs);
+
+/*
+ * Debug-only: force a counter-clear/disable/clear-irq/re-enable cycle, the
+ * same sequence bwmon_start() runs at probe time (full reinit, clear_all=true
+ * for the counters). Unlike the regular post-interrupt rearm in
+ * bwmon_intr_thread() (which uses clear_all=false), this also resets
+ * ZONE_COUNT_RAW so a saturated/stuck zone counter can't mask a fresh
+ * crossing event during a manual re-test.
+ */
+static ssize_t bwmon_debug_clear_irq_write(struct file *file, const char __user *buf,
+					   size_t count, loff_t *ppos)
+{
+	struct icc_bwmon *bwmon = file->private_data;
+
+	bwmon_disable(bwmon);
+	bwmon_clear_counters(bwmon, true);
+	bwmon_clear_irq(bwmon);
+	bwmon_enable(bwmon, BWMON_IRQ_ENABLE_MASK);
+
+	return count;
+}
+
+static const struct file_operations bwmon_debug_clear_irq_fops = {
+	.open = simple_open,
+	.write = bwmon_debug_clear_irq_write,
+	.llseek = default_llseek,
+};
 
 static int bwmon_probe(struct platform_device *pdev)
 {
@@ -933,6 +1021,18 @@ static int bwmon_probe(struct platform_device *pdev)
 	bwmon_disable(bwmon);
 
 	/*
+	 * Debug-only: log whatever IRQ_STATUS was left latched from before
+	 * this probe (e.g. carried over from boot/bootloader DDR activity),
+	 * before it gets cleared by bwmon_start() below.
+	 */
+	{
+		unsigned int boot_status = 0;
+
+		regmap_field_read(bwmon->regs[F_IRQ_STATUS], &boot_status);
+		dev_info(dev, "boot-time IRQ_STATUS=0x%x (pre-clear)\n", boot_status);
+	}
+
+	/*
 	 * SoCs with multiple cpu-bwmon instances can end up using a shared interrupt
 	 * line. Using the devm_ variant might result in the IRQ handler being executed
 	 * after bwmon_disable in bwmon_remove()
@@ -942,8 +1042,23 @@ static int bwmon_probe(struct platform_device *pdev)
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to request IRQ\n");
 
+	/* Debug-only: IRQ_STATUS right after request_irq, before bwmon_start()'s clear/enable. */
+	{
+		unsigned int post_request_status = 0;
+
+		regmap_field_read(bwmon->regs[F_IRQ_STATUS], &post_request_status);
+		dev_info(dev, "post-request_irq IRQ_STATUS=0x%x (pre-start)\n",
+			 post_request_status);
+	}
+
 	platform_set_drvdata(pdev, bwmon);
 	bwmon_start(bwmon);
+
+	bwmon->debugfs_dir = debugfs_create_dir(dev_name(dev), NULL);
+	debugfs_create_file("regs", 0400, bwmon->debugfs_dir, bwmon,
+			     &bwmon_debug_regs_fops);
+	debugfs_create_file("clear_irq", 0200, bwmon->debugfs_dir, bwmon,
+			     &bwmon_debug_clear_irq_fops);
 
 	return 0;
 }
@@ -952,6 +1067,7 @@ static void bwmon_remove(struct platform_device *pdev)
 {
 	struct icc_bwmon *bwmon = platform_get_drvdata(pdev);
 
+	debugfs_remove_recursive(bwmon->debugfs_dir);
 	bwmon_disable(bwmon);
 	free_irq(bwmon->irq, bwmon);
 }
