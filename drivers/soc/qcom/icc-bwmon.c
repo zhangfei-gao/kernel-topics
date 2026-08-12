@@ -411,10 +411,10 @@ static const struct reg_field sdm845_llcc_bwmon_reg_fields[] = {
 	[F_THRESHOLD_COUNT_ZONE1]	= REG_FIELD(BWMON_V5_THRESHOLD_COUNT, 8, 15),
 	[F_THRESHOLD_COUNT_ZONE2]	= REG_FIELD(BWMON_V5_THRESHOLD_COUNT, 16, 23),
 	[F_THRESHOLD_COUNT_ZONE3]	= REG_FIELD(BWMON_V5_THRESHOLD_COUNT, 24, 31),
-	[F_ZONE0_MAX]		= REG_FIELD(BWMON_V5_ZONE_MAX(0), 0, 11),
-	[F_ZONE1_MAX]		= REG_FIELD(BWMON_V5_ZONE_MAX(1), 0, 11),
-	[F_ZONE2_MAX]		= REG_FIELD(BWMON_V5_ZONE_MAX(2), 0, 11),
-	[F_ZONE3_MAX]		= REG_FIELD(BWMON_V5_ZONE_MAX(3), 0, 11),
+	[F_ZONE0_MAX]		= REG_FIELD(BWMON_V5_ZONE_MAX(0), 0, 15),
+	[F_ZONE1_MAX]		= REG_FIELD(BWMON_V5_ZONE_MAX(1), 0, 15),
+	[F_ZONE2_MAX]		= REG_FIELD(BWMON_V5_ZONE_MAX(2), 0, 15),
+	[F_ZONE3_MAX]		= REG_FIELD(BWMON_V5_ZONE_MAX(3), 0, 15),
 };
 
 static const struct regmap_range sdm845_llcc_bwmon_reg_noread_ranges[] = {
@@ -622,9 +622,12 @@ static irqreturn_t bwmon_intr(int irq, void *dev_id)
 	unsigned int status, max;
 	int zone;
 
+	printk(" %s\n", __func__);
+
 	if (regmap_field_read(bwmon->regs[F_IRQ_STATUS], &status))
 		return IRQ_NONE;
 
+	printk(" %s status=0x%x\n", __func__, status);
 	status &= BWMON_IRQ_ENABLE_MASK;
 	if (!status) {
 		/*
@@ -664,6 +667,7 @@ static irqreturn_t bwmon_intr_thread(int irq, void *dev_id)
 	struct dev_pm_opp *opp, *target_opp;
 	unsigned int bw_kbps, up_kbps, down_kbps, meas_kbps;
 
+	printk(" %s\n", __func__);
 	bw_kbps = bwmon->target_kbps;
 	meas_kbps = bwmon->target_kbps;
 
@@ -838,6 +842,56 @@ static const struct file_operations bwmon_debug_clear_irq_fops = {
 	.llseek = default_llseek,
 };
 
+/*
+ * Debug-only: force zone3's count threshold to the minimum (0) so the very
+ * next sampling window classified as zone3 satisfies the interrupt
+ * condition immediately, regardless of real traffic. Zone3's action
+ * (increment counter #3) and its IRQ_ENABLE bit are already configured by
+ * bwmon_start() and are left untouched. ZONE_COUNT_THRESHOLD can only be
+ * written while the monitor is disabled, hence the disable/enable pair.
+ */
+static ssize_t bwmon_debug_force_irq_write(struct file *file, const char __user *buf,
+					   size_t count, loff_t *ppos)
+{
+	struct icc_bwmon *bwmon = file->private_data;
+
+	bwmon_disable(bwmon);
+	regmap_field_write(bwmon->regs[F_THRESHOLD_COUNT_ZONE3], 0);
+	bwmon_clear_counters(bwmon, true);
+	bwmon_clear_irq(bwmon);
+	bwmon_enable(bwmon, BWMON_IRQ_ENABLE_MASK);
+
+	return count;
+}
+
+static const struct file_operations bwmon_debug_force_irq_fops = {
+	.open = simple_open,
+	.write = bwmon_debug_force_irq_write,
+	.llseek = default_llseek,
+};
+
+/*
+ * Debug-only: undo bwmon_debug_force_irq_write() by re-running the same
+ * full reinit bwmon_start() performs at probe time, which restores
+ * ZONE_COUNT_THRESHOLD (along with everything else it programs) to
+ * bwmon->data's normal values.
+ */
+static ssize_t bwmon_debug_restore_write(struct file *file, const char __user *buf,
+					 size_t count, loff_t *ppos)
+{
+	struct icc_bwmon *bwmon = file->private_data;
+
+	bwmon_start(bwmon);
+
+	return count;
+}
+
+static const struct file_operations bwmon_debug_restore_fops = {
+	.open = simple_open,
+	.write = bwmon_debug_restore_write,
+	.llseek = default_llseek,
+};
+
 static int bwmon_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -918,6 +972,10 @@ static int bwmon_probe(struct platform_device *pdev)
 			     &bwmon_debug_regs_fops);
 	debugfs_create_file("clear_irq", 0200, bwmon->debugfs_dir, bwmon,
 			     &bwmon_debug_clear_irq_fops);
+	debugfs_create_file("force_irq", 0200, bwmon->debugfs_dir, bwmon,
+			     &bwmon_debug_force_irq_fops);
+	debugfs_create_file("restore", 0200, bwmon->debugfs_dir, bwmon,
+			     &bwmon_debug_restore_fops);
 
 	return 0;
 }
@@ -980,6 +1038,8 @@ static const struct of_device_id bwmon_of_match[] = {
 	/* BWMONv5 */
 	{ .compatible = "qcom,sdm845-llcc-bwmon", .data = &sdm845_llcc_bwmon_data },
 	{ .compatible = "qcom,sc7280-llcc-bwmon", .data = &sc7280_llcc_bwmon_data },
+	{ .compatible = "qcom,sa8797p-llcc-bwmon", .data = &sc7280_llcc_bwmon_data },
+//	{ .compatible = "qcom,sa8797p-cpu-bwmon", .data = &sdm845_cpu_bwmon_data },
 
 	/* Compatibles kept for legacy reasons */
 	{ .compatible = "qcom,sc7280-cpu-bwmon", .data = &sdm845_cpu_bwmon_data },

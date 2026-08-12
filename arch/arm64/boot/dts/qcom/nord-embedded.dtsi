@@ -2230,6 +2230,7 @@
 
 		operating-points-v2 = <&cpu_bwmon_opp_table>;
 
+		status = "disabled";
 		cpu_bwmon_opp_table: opp-table {
 			compatible = "operating-points-v2";
 
@@ -2259,6 +2260,7 @@
 				 &hscnoc SLAVE_LLCC QCOM_ICC_TAG_ACTIVE_ONLY>;
 
 		operating-points-v2 = <&cpu_bwmon_opp_table>;
+		status = "disabled";
 	};
 
 	cpu_bwmon2: pmu@1014300 {
@@ -2269,5 +2271,6 @@
 				 &hscnoc SLAVE_LLCC QCOM_ICC_TAG_ACTIVE_ONLY>;
 
 		operating-points-v2 = <&cpu_bwmon_opp_table>;
+		status = "disabled";
 	};
 };
