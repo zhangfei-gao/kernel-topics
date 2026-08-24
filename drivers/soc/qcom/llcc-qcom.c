@@ -5446,12 +5446,14 @@ static int qcom_llcc_get_fw_config(struct platform_device *pdev)
 	u32 i, sz;
 	int ret;
 
+	printk("gzf %s\n", __func__);
 	ret = of_reserved_mem_region_to_resource(dev->of_node, 0, &res);
 	if (ret) {
 		dev_err(dev, "Unable to locate DT /reserved-memory resource\n");
 		return ret;
 	}
 
+	printk("gzf %s ret=%d\n", __func__, ret);
 	slc_mem = devm_memremap(dev, res.start, resource_size(&res), MEMREMAP_WB);
 	if (IS_ERR(slc_mem)) {
 		dev_err(dev, "Failed to memremap SLC shared memory\n");
@@ -5479,6 +5481,7 @@ static int qcom_llcc_get_fw_config(struct platform_device *pdev)
 			refcount_set(&drv_data->desc[i].refcount, 1);
 	}
 
+	printk("gzf %s done\n", __func__);
 	drv_data->cfg = NULL;
 	drv_data->cfg_size = sz;
 
@@ -5521,6 +5524,7 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 	u32 version;
 	struct regmap *regmap;
 
+	printk("gzf %s\n", __func__);
 	if (!IS_ERR(drv_data))
 		return -EBUSY;
 

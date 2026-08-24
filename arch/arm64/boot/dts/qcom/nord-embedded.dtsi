@@ -2206,5 +2206,6 @@
 			    "llcc_broadcast_base",
 			    "llcc_broadcast_and_base";
 		interrupts = <GIC_SPI 580 IRQ_TYPE_LEVEL_HIGH>;
+		memory-region = <&llcc_sct_mem>;
 	};
 };
