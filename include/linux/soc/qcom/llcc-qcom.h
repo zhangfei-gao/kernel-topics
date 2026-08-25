@@ -85,7 +85,15 @@
 #define LLCC_CAM_OFE_STROV	 93
 #define LLCC_CPUSS_HEU	 94
 #define LLCC_PCIE_TCU	 97
+#define LLCC_GPUHTW_LITTLE	 98
+#define LLCC_PCIE	 99
 #define LLCC_MDM_PNG_FIXED	 100
+#define LLCC_BARRIER	 104
+#define LLCC_WRITE_ORDERED_FLOW_1	 105
+#define LLCC_WRITE_ORDERED_FLOW_2	 106
+#define LLCC_NSP_SYSPOOL	 107
+#define LLCC_ASC	 108
+#define LLCC_LMCU	 109
 
 /**
  * struct llcc_slice_desc - Cache slice descriptor
