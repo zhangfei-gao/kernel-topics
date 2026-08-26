@@ -333,6 +333,37 @@ static const struct reg_field sdm845_cpu_bwmon_reg_fields[] = {
 	[F_ZONE3_MAX]		= REG_FIELD(BWMON_V4_ZONE_MAX(3), 0, 11),
 };
 
+/*
+ * sa8797p cpu-bwmon: same register offsets as BWMON v4, but the
+ * threshold and zone-max fields are 16 bits wide instead of 12.
+ */
+static const struct reg_field sa8797p_cpu_bwmon_reg_fields[] = {
+	[F_GLOBAL_IRQ_CLEAR]	= REG_FIELD(BWMON_V4_GLOBAL_IRQ_CLEAR_845, 0, 0),
+	[F_GLOBAL_IRQ_ENABLE]	= REG_FIELD(BWMON_V4_GLOBAL_IRQ_ENABLE_845, 0, 0),
+	[F_IRQ_STATUS]		= REG_FIELD(BWMON_V4_IRQ_STATUS, 4, 7),
+	[F_IRQ_CLEAR]		= REG_FIELD(BWMON_V4_IRQ_CLEAR, 4, 7),
+	[F_IRQ_ENABLE]		= REG_FIELD(BWMON_V4_IRQ_ENABLE, 4, 7),
+	/* F_ENABLE covers entire register to disable other features */
+	[F_ENABLE]		= REG_FIELD(BWMON_V4_ENABLE, 0, 31),
+	[F_CLEAR]		= REG_FIELD(BWMON_V4_CLEAR, 0, 1),
+	[F_SAMPLE_WINDOW]	= REG_FIELD(BWMON_V4_SAMPLE_WINDOW, 0, 23),
+	[F_THRESHOLD_HIGH]	= REG_FIELD(BWMON_V4_THRESHOLD_HIGH, 0, 15),
+	[F_THRESHOLD_MED]	= REG_FIELD(BWMON_V4_THRESHOLD_MED, 0, 15),
+	[F_THRESHOLD_LOW]	= REG_FIELD(BWMON_V4_THRESHOLD_LOW, 0, 15),
+	[F_ZONE_ACTIONS_ZONE0]	= REG_FIELD(BWMON_V4_ZONE_ACTIONS, 0, 7),
+	[F_ZONE_ACTIONS_ZONE1]	= REG_FIELD(BWMON_V4_ZONE_ACTIONS, 8, 15),
+	[F_ZONE_ACTIONS_ZONE2]	= REG_FIELD(BWMON_V4_ZONE_ACTIONS, 16, 23),
+	[F_ZONE_ACTIONS_ZONE3]	= REG_FIELD(BWMON_V4_ZONE_ACTIONS, 24, 31),
+	[F_THRESHOLD_COUNT_ZONE0]	= REG_FIELD(BWMON_V4_THRESHOLD_COUNT, 0, 7),
+	[F_THRESHOLD_COUNT_ZONE1]	= REG_FIELD(BWMON_V4_THRESHOLD_COUNT, 8, 15),
+	[F_THRESHOLD_COUNT_ZONE2]	= REG_FIELD(BWMON_V4_THRESHOLD_COUNT, 16, 23),
+	[F_THRESHOLD_COUNT_ZONE3]	= REG_FIELD(BWMON_V4_THRESHOLD_COUNT, 24, 31),
+	[F_ZONE0_MAX]		= REG_FIELD(BWMON_V4_ZONE_MAX(0), 0, 15),
+	[F_ZONE1_MAX]		= REG_FIELD(BWMON_V4_ZONE_MAX(1), 0, 15),
+	[F_ZONE2_MAX]		= REG_FIELD(BWMON_V4_ZONE_MAX(2), 0, 15),
+	[F_ZONE3_MAX]		= REG_FIELD(BWMON_V4_ZONE_MAX(3), 0, 15),
+};
+
 static const struct regmap_range sdm845_cpu_bwmon_reg_noread_ranges[] = {
 	regmap_reg_range(BWMON_V4_GLOBAL_IRQ_CLEAR_845, BWMON_V4_GLOBAL_IRQ_CLEAR_845),
 	regmap_reg_range(BWMON_V4_IRQ_CLEAR, BWMON_V4_IRQ_CLEAR),
@@ -722,6 +753,7 @@ static int bwmon_init_regmap(struct platform_device *pdev,
 	BUILD_BUG_ON(ARRAY_SIZE(msm8998_bwmon_global_reg_fields) != F_NUM_GLOBAL_FIELDS);
 	BUILD_BUG_ON(ARRAY_SIZE(msm8998_bwmon_reg_fields) != F_NUM_FIELDS);
 	BUILD_BUG_ON(ARRAY_SIZE(sdm845_cpu_bwmon_reg_fields) != F_NUM_FIELDS);
+	BUILD_BUG_ON(ARRAY_SIZE(sa8797p_cpu_bwmon_reg_fields) != F_NUM_FIELDS);
 	BUILD_BUG_ON(ARRAY_SIZE(sdm845_llcc_bwmon_reg_fields) != F_NUM_FIELDS);
 
 	ret = devm_regmap_field_bulk_alloc(dev, map, bwmon->regs,
@@ -837,6 +869,16 @@ static const struct icc_bwmon_data sdm845_cpu_bwmon_data = {
 	.regmap_cfg = &sdm845_cpu_bwmon_regmap_cfg,
 };
 
+static const struct icc_bwmon_data sa8797p_cpu_bwmon_data = {
+	.sample_ms = 4,
+	.count_unit_kb = 64,
+	.zone1_thres_count = 16,
+	.zone3_thres_count = 1,
+	.quirks = BWMON_HAS_GLOBAL_IRQ,
+	.regmap_fields = sa8797p_cpu_bwmon_reg_fields,
+	.regmap_cfg = &sdm845_cpu_bwmon_regmap_cfg,
+};
+
 static const struct icc_bwmon_data sdm845_llcc_bwmon_data = {
 	.sample_ms = 4,
 	.count_unit_kb = 1024,
@@ -861,6 +903,7 @@ static const struct of_device_id bwmon_of_match[] = {
 	{ .compatible = "qcom,msm8998-bwmon", .data = &msm8998_bwmon_data },
 	/* BWMONv4, unified register space */
 	{ .compatible = "qcom,sdm845-bwmon", .data = &sdm845_cpu_bwmon_data },
+	{ .compatible = "qcom,sa8797p-cpu-bwmon", .data = &sa8797p_cpu_bwmon_data },
 	/* BWMONv5 */
 	{ .compatible = "qcom,sdm845-llcc-bwmon", .data = &sdm845_llcc_bwmon_data },
 	{ .compatible = "qcom,sc7280-llcc-bwmon", .data = &sc7280_llcc_bwmon_data },
