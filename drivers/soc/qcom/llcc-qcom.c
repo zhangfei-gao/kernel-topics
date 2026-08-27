@@ -5530,6 +5530,36 @@ static struct regmap *qcom_llcc_init_mmio(struct platform_device *pdev, u8 index
 	return devm_regmap_init_mmio(&pdev->dev, base, &llcc_regmap_config);
 }
 
+/*
+ * XXX debug only: dump JTAG_ID / fuse-controller registers to check whether
+ * HLOS can even access them (security_tag is RESTRICTED in IP Catalog, so
+ * this may fault with a synchronous external abort on some fw configs).
+ * Remove once the JTAG_ID / SKU question is resolved with HW.
+ */
+static void qcom_llcc_dump_jtag_regs(void)
+{
+	static const phys_addr_t regs[] = {
+		0x360D4844, /* DIE_0_JTAG_ID */
+		0x360D4118,
+		0x01FC8000,
+	};
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(regs); i++) {
+		void __iomem *base = ioremap(regs[i], 4);
+		u32 val;
+
+		if (!base) {
+			printk("gzf jtag: ioremap failed for 0x%llx\n", (u64)regs[i]);
+			continue;
+		}
+
+		val = readl(base);
+		printk("gzf jtag: 0x%llx = 0x%08x\n", (u64)regs[i], val);
+		iounmap(base);
+	}
+}
+
 static int qcom_llcc_probe(struct platform_device *pdev)
 {
 	u32 num_banks;
@@ -5543,6 +5573,7 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 	struct regmap *regmap;
 
 	printk("gzf %s\n", __func__);
+	qcom_llcc_dump_jtag_regs();
 	if (!IS_ERR(drv_data))
 		return -EBUSY;
 
