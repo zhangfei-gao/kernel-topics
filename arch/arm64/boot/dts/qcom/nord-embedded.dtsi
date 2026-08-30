@@ -36,6 +36,10 @@
 		qcom,bcm-voters = <&apps_bcm_voter>;
 	};
 
+	llcc_test: llcc-test {
+		compatible = "qcom,llcc-test";
+	};
+
 	vreg_wcn_3p3: regulator-wcn-3p3 {
 		compatible = "regulator-fixed";
 		regulator-name = "vreg_wcn_3p3";

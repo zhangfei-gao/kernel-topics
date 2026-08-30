@@ -5435,10 +5435,13 @@ static int _qcom_llcc_cfg_program_v6(const struct llcc_slice_config *config,
 
 	if (config->activate_on_init) {
 		desc = llcc_slice_getd(config->usecase_id);
+		printk("gzf %s: uid=%u getd=%s\n", __func__, config->usecase_id,
+		       PTR_ERR_OR_ZERO(desc) ? "FAIL" : "OK");
 		if (PTR_ERR_OR_ZERO(desc))
 			return -EINVAL;
 
 		ret = llcc_slice_activate(desc);
+		printk("gzf %s: uid=%u activate ret=%d\n", __func__, config->usecase_id, ret);
 	}
 
 	return ret;
@@ -5627,6 +5630,8 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 	u32 version;
 	struct regmap *regmap;
 
+	printk("gzf %s\n", __func__);
+
 	if (!IS_ERR(drv_data))
 		return -EBUSY;
 
@@ -5757,6 +5762,7 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, drv_data);
 
+	printk("gzf %s done\n", __func__);
 	return 0;
 err:
 	drv_data = ERR_PTR(-ENODEV);
