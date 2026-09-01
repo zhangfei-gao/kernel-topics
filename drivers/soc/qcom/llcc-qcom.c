@@ -77,6 +77,7 @@
 #define LLCC_VERSION_6_0_0_0          0X06000000
 
 #define SLC_SCT_MEM_LAYOUT_VERSION1   1 /* SCT Memory layout version */
+#define SLC_SCT_MEM_LAYOUT_VERSION2   2 /* Adds flags/hwmutex to slice_properties */
 #define SLC_SCT_DONE                  0x00534354444f4e45 /* SCT programming OK */
 #define SLC_SCT_FAIL                  0x005343544641494c /* SCT programming failed */
 #define SLC_SCT_NAME_LEN              15
@@ -4550,8 +4551,10 @@ static const struct qcom_llcc_config glymur_cfg[] = {
 
 static const struct qcom_llcc_config nord_cfg[] = {
 	{
-		.sct_data	= nord_data,
-		.size		= ARRAY_SIZE(nord_data),
+		.sct_data	= NULL,
+		.size		= 0,
+		//.sct_data	= nord_data,
+		//.size		= ARRAY_SIZE(nord_data),
 		.reg_offset	= llcc_v6_reg_offset,
 		.edac_reg_offset = &llcc_v6_edac_reg_offset,
 		.num_banks	= 16,
@@ -5531,8 +5534,21 @@ static int qcom_llcc_verify_fw_config(struct device *dev,
 		u8 version = (u8)(le64_to_cpu(slc_mem->sct_status.version));
 		u64 code = le64_to_cpu(slc_mem->sct_status.error.code);
 		u64 param = le64_to_cpu(slc_mem->sct_status.error.param);
+		u8 revision = slc_mem->sct_details.revision;
+		char name_buf[SLC_SCT_NAME_LEN];
 
-		if (version == SLC_SCT_MEM_LAYOUT_VERSION1) {
+		memcpy(name_buf, slc_mem->sct_details.name, SLC_SCT_NAME_LEN - 1);
+		name_buf[SLC_SCT_NAME_LEN - 1] = '\0';
+
+		printk("gzf %s: program_status=0x%llx version=%u revision=%u name=%s desc_count=%u scid_max=%u tcm_present=%u tcm_offset=0x%x\n",
+			__func__, program_status, version, revision, name_buf,
+			le32_to_cpu(slc_mem->slice_descs_count),
+			le32_to_cpu(slc_mem->scid_max),
+			le32_to_cpu(slc_mem->tcm_mem_info.is_present),
+			le32_to_cpu(slc_mem->tcm_mem_info.offset));
+
+		if (version >= SLC_SCT_MEM_LAYOUT_VERSION1 &&
+		    version <= SLC_SCT_MEM_LAYOUT_VERSION2) {
 			dev_err(dev, "SCT init failed: code = %llu, param = %llu, version = 0x%x\n",
 				code, param, version);
 		} else {
@@ -5555,17 +5571,23 @@ static int qcom_llcc_get_fw_config(struct platform_device *pdev)
 	u32 i, sz;
 	int ret;
 
+	printk("gzf %s\n", __func__);
 	ret = of_reserved_mem_region_to_resource(dev->of_node, 0, &res);
 	if (ret) {
 		dev_err(dev, "Unable to locate DT /reserved-memory resource\n");
 		return ret;
 	}
 
+	printk("gzf %s ret=%d\n", __func__, ret);
+	printk("gzf %s res=%pR\n", __func__, &res);
 	slc_mem = devm_memremap(dev, res.start, resource_size(&res), MEMREMAP_WB);
 	if (IS_ERR(slc_mem)) {
 		dev_err(dev, "Failed to memremap SLC shared memory\n");
 		return PTR_ERR(slc_mem);
 	}
+
+	print_hex_dump(KERN_INFO, "gzf slc_mem: ", DUMP_PREFIX_OFFSET, 16, 1,
+		       slc_mem, min_t(size_t, resource_size(&res), 128), true);
 
 	ret = qcom_llcc_verify_fw_config(dev, slc_mem);
 	if (ret)
@@ -5588,6 +5610,7 @@ static int qcom_llcc_get_fw_config(struct platform_device *pdev)
 			refcount_set(&drv_data->desc[i].refcount, 1);
 	}
 
+	printk("gzf %s done\n", __func__);
 	drv_data->cfg = NULL;
 	drv_data->cfg_size = sz;
 
@@ -5618,6 +5641,36 @@ static struct regmap *qcom_llcc_init_mmio(struct platform_device *pdev, u8 index
 	return devm_regmap_init_mmio(&pdev->dev, base, &llcc_regmap_config);
 }
 
+/*
+ * XXX debug only: dump JTAG_ID / fuse-controller registers to check whether
+ * HLOS can even access them (security_tag is RESTRICTED in IP Catalog, so
+ * this may fault with a synchronous external abort on some fw configs).
+ * Remove once the JTAG_ID / SKU question is resolved with HW.
+ */
+static void qcom_llcc_dump_jtag_regs(void)
+{
+	static const phys_addr_t regs[] = {
+		0x360D4844, /* DIE_0_JTAG_ID */
+		0x360D4118,
+		0x01FC8000,
+	};
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(regs); i++) {
+		void __iomem *base = ioremap(regs[i], 4);
+		u32 val;
+
+		if (!base) {
+			printk("gzf jtag: ioremap failed for 0x%llx\n", (u64)regs[i]);
+			continue;
+		}
+
+		val = readl(base);
+		printk("gzf jtag: 0x%llx = 0x%08x\n", (u64)regs[i], val);
+		iounmap(base);
+	}
+}
+
 static int qcom_llcc_probe(struct platform_device *pdev)
 {
 	u32 num_banks;
@@ -5631,7 +5684,7 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 	struct regmap *regmap;
 
 	printk("gzf %s\n", __func__);
-
+	qcom_llcc_dump_jtag_regs();
 	if (!IS_ERR(drv_data))
 		return -EBUSY;
 

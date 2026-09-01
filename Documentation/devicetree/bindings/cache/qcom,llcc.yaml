@@ -412,6 +412,7 @@ allOf:
           contains:
             enum:
               - qcom,hawi-llcc
+              - qcom,nord-llcc
     then:
       required:
         - memory-region

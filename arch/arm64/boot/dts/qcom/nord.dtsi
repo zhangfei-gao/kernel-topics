@@ -587,6 +587,18 @@
 			no-map;
 		};
 
+		/*
+		 * XXX: address supplied by HW/FW, not yet confirmed against
+		 * this tree's memory map — it falls inside hyp_mem's range
+		 * (0x82800000..0x84c00000) and is not 4K-aligned. Assumed
+		 * mappable for now; revisit once HW confirms the real
+		 * placement (may require shrinking/relocating hyp_mem).
+		 */
+		llcc_sct_mem: llcc-sct-region@84030c00 {
+			reg = <0x0 0x84030c00 0x0 0x1000>;
+			no-map;
+		};
+
 		deepsleep_mem: deepsleep-region@84c00000 {
 			reg = <0x0 0x84c00000 0x0 0x800000>;
 			no-map;
@@ -6444,6 +6456,7 @@
 				    "llcc15_base",
 				    "llcc_broadcast_base",
 				    "llcc_broadcast_and_base";
+			memory-region = <&llcc_sct_mem>;
 		};
 	};
 
