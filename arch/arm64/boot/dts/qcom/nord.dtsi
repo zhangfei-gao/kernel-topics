@@ -1914,7 +1914,16 @@
 				     <GIC_SPI 713 IRQ_TYPE_LEVEL_HIGH>;
 			interrupt-names = "macirq", "sfty";
 
-			iommus = <&apps_smmu_2 0x1200 0xf>;
+			iommus = <&apps_smmu_2 0x1201 0x2>,
+				 <&apps_smmu_2 0x1202 0x0>,
+				 <&apps_smmu_2 0x1203 0x2>,
+				 <&apps_smmu_2 0x1204 0x0>,
+				 <&apps_smmu_2 0x1205 0x2>,
+				 <&apps_smmu_2 0x1206 0x0>,
+				 <&apps_smmu_2 0x1207 0x2>,
+				 <&apps_smmu_2 0x1208 0x0>,
+				 <&apps_smmu_2 0x1209 0x0>,
+				 <&apps_smmu_2 0x120a 0x0>;
 			dma-coherent;
 
 			snps,tso;
@@ -1936,7 +1945,16 @@
 				     <GIC_SPI 361 IRQ_TYPE_LEVEL_HIGH>;
 			interrupt-names = "macirq", "sfty";
 
-			iommus = <&apps_smmu_2 0x11c0 0xf>;
+			iommus = <&apps_smmu_2 0x11c1 0x8>,
+				 <&apps_smmu_2 0x11c2 0x1>,
+				 <&apps_smmu_2 0x11c3 0x1>,
+				 <&apps_smmu_2 0x11c4 0x3>,
+				 <&apps_smmu_2 0x11c5 0x3>,
+				 <&apps_smmu_2 0x11c6 0x3>,
+				 <&apps_smmu_2 0x11c7 0x3>,
+				 <&apps_smmu_2 0x11c8 0x2>,
+				 <&apps_smmu_2 0x11c9 0x8>,
+				 <&apps_smmu_2 0x11ca 0x2>;
 			dma-coherent;
 
 			snps,tso;
