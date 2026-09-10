@@ -194,6 +194,7 @@ int aqr_hwmon_probe(struct phy_device *phydev)
 	char *hwmon_name;
 	int i, j;
 
+	printk("gzf %s\n", __func__);
 	hwmon_name = devm_kstrdup(dev, dev_name(dev), GFP_KERNEL);
 	if (!hwmon_name)
 		return -ENOMEM;

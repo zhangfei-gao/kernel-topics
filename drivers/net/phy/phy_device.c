@@ -1364,7 +1364,23 @@ int phy_init_hw(struct phy_device *phydev)
 	phy_interface_zero(phydev->possible_interfaces);
 
 	if (phydev->drv->config_init) {
+		dev_err(&phydev->mdio.dev,
+                "gzf: config_init enter: phy=%s, addr=%d, "
+                "driver=%s, fn=%ps\n",
+                phydev_name(phydev),
+                phydev->mdio.addr,
+                phydev->drv->name,
+                phydev->drv->config_init);
+
 		ret = phydev->drv->config_init(phydev);
+		printk("gzf %s 333 ret=%d\n", __func__, ret);
+
+		dev_err(&phydev->mdio.dev,
+                "gzf: config_init exit: driver=%s, fn=%ps, ret=%d\n",
+                phydev->drv->name,
+                phydev->drv->config_init,
+                ret);
+
 		if (ret < 0)
 			return ret;
 	}

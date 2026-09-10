@@ -766,6 +766,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	ethqos->phy_mode = plat_dat->phy_interface;
+
+	printk("gzf %sethqos->phy_mode=%d\n", __func__, ethqos->phy_mode);
 	switch (ethqos->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
 	case PHY_INTERFACE_MODE_RGMII_ID:
@@ -779,7 +781,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		plat_dat->mac_finish = ethqos_mac_finish_serdes;
 		break;
 	default:
-		dev_err(dev, "Unsupported phy mode %s\n",
+		dev_err(dev, "gzf Unsupported phy mode %s\n",
 			phy_modes(ethqos->phy_mode));
 		return -EINVAL;
 	}

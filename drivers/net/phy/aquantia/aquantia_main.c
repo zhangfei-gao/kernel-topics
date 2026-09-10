@@ -255,6 +255,7 @@ static int aqr_config_intr(struct phy_device *phydev)
 	bool en = phydev->interrupts == PHY_INTERRUPT_ENABLED;
 	int err;
 
+	printk("gzf %s\n", __func__);
 	if (en) {
 		/* Clear any pending interrupts before enabling them */
 		err = phy_read_mmd(phydev, MDIO_MMD_AN, MDIO_AN_TX_VEND_INT_STATUS2);
@@ -603,6 +604,7 @@ static int aqr_gen2_read_status(struct phy_device *phydev)
 	struct aqr107_priv *priv = phydev->priv;
 	int i, ret;
 
+	printk("gzf %s\n", __func__);
 	ret = aqr_gen1_read_status(phydev);
 	if (ret)
 		return ret;
@@ -692,12 +694,13 @@ int aqr_wait_reset_complete(struct phy_device *phydev)
 {
 	int ret, val;
 
+	printk("gzf %s\n", __func__);
 	ret = read_poll_timeout(phy_read_mmd, val, val != 0,
 				AQR_FW_WAIT_SLEEP_US, AQR_FW_WAIT_TIMEOUT_US,
 				false, phydev, MDIO_MMD_VEND1,
 				VEND1_GLOBAL_FW_ID);
 	if (val < 0) {
-		phydev_err(phydev, "Failed to read VEND1_GLOBAL_FW_ID: %pe\n",
+		phydev_err(phydev, "gzf Failed to read VEND1_GLOBAL_FW_ID: %pe\n",
 			   ERR_PTR(val));
 		return val;
 	}
@@ -1099,6 +1102,7 @@ static int aqr_gen4_config_init(struct phy_device *phydev)
 	struct aqr107_priv *priv = phydev->priv;
 	int ret;
 
+	printk("gzf %s\n", __func__);
 	priv->wait_on_global_cfg = true;
 
 	ret = aqr_gen3_config_init(phydev);
@@ -1165,16 +1169,22 @@ static int aqr107_probe(struct phy_device *phydev)
 {
 	int ret;
 
+	printk("gzf %s\n", __func__);
+
 	phydev->priv = devm_kzalloc(&phydev->mdio.dev,
 				    sizeof(struct aqr107_priv), GFP_KERNEL);
 	if (!phydev->priv)
 		return -ENOMEM;
 
 	ret = aqr_firmware_load(phydev);
+	printk("gzf %s load ret=%d\n", __func__, ret);
 	if (ret)
 		return ret;
 
-	return aqr_hwmon_probe(phydev);
+	ret = aqr_hwmon_probe(phydev);
+
+	printk("gzf %s probe ret=%d\n", __func__, ret);
+	return ret;
 }
 
 

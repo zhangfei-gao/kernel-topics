@@ -829,9 +829,9 @@
 };
 
 &ethernet0 {
+	//phy-mode = "usxgmii";
 	phy-mode = "sgmii";
 	phy-handle = <&sgmii_phy0>;
-	snps,ps-speed = <1000>;
 
 	pinctrl-0 = <&ethernet0_default>;
 	pinctrl-names = "default";
@@ -847,7 +847,8 @@
 		#size-cells = <0>;
 
 		sgmii_phy0: phy@8 {
-			compatible = "ethernet-phy-id0141.0dd4";
+			compatible = "ethernet-phy-id31c3.1c33"
+			//compatible = "ethernet-phy-id31c3.1c33", "ethernet-phy-ieee802.3-c45";
 			reg = <0x8>;
 			device_type = "ethernet-phy";
 			interrupts-extended = <&tlmm 141 IRQ_TYPE_EDGE_FALLING>;
@@ -918,8 +919,9 @@
 
 &ethernet1 {
 	phy-mode = "sgmii";
+	//phy-mode = "usxgmii";
 	phy-handle = <&sgmii_phy1>;
-	snps,ps-speed = <1000>;
+	//snps,ps-speed = <1000>;
 
 	pinctrl-0 = <&ethernet1_default>;
 	pinctrl-names = "default";
@@ -935,7 +937,9 @@
 		#size-cells = <0>;
 
 		sgmii_phy1: phy@a {
-			compatible = "ethernet-phy-id0141.0dd4";
+			//compatible = "ethernet-phy-id0141.0dd4";
+			compatible = "ethernet-phy-id31c3.1c33";
+			//compatible = "ethernet-phy-id31c3.1c33", "ethernet-phy-ieee802.3-c45";
 			reg = <0xa>;
 			device_type = "ethernet-phy";
 			interrupts-extended = <&tlmm 55 IRQ_TYPE_EDGE_FALLING>;

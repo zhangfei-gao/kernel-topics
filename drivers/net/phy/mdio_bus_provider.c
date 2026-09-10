@@ -412,6 +412,7 @@ static struct phy_device *mdiobus_scan(struct mii_bus *bus, int addr, bool c45)
 	char node_name[16];
 	int err;
 
+	printk("gzf %s c45=%d\n", __func__, c45);
 	phydev = get_phy_device(bus, addr, c45);
 	if (IS_ERR(phydev))
 		return phydev;
@@ -458,6 +459,7 @@ static struct phy_device *mdiobus_scan(struct mii_bus *bus, int addr, bool c45)
  */
 struct phy_device *mdiobus_scan_c22(struct mii_bus *bus, int addr)
 {
+	printk("gzf %s\n", __func__);
 	return mdiobus_scan(bus, addr, false);
 }
 EXPORT_SYMBOL(mdiobus_scan_c22);
@@ -476,6 +478,7 @@ EXPORT_SYMBOL(mdiobus_scan_c22);
  */
 static struct phy_device *mdiobus_scan_c45(struct mii_bus *bus, int addr)
 {
+	printk("gzf %s\n", __func__);
 	return mdiobus_scan(bus, addr, true);
 }
 
@@ -483,7 +486,9 @@ static int mdiobus_scan_bus_c22(struct mii_bus *bus)
 {
 	int i;
 
+	printk("gzf %s\n", __func__);
 	for (i = 0; i < PHY_MAX_ADDR; i++) {
+		printk("gzf bus->phy_mask=%x, BIT(i)=%x\n", bus->phy_mask, BIT(i));
 		if ((bus->phy_mask & BIT(i)) == 0) {
 			struct phy_device *phydev;
 
@@ -499,7 +504,9 @@ static int mdiobus_scan_bus_c45(struct mii_bus *bus)
 {
 	int i;
 
+	printk("gzf %s\n", __func__);
 	for (i = 0; i < PHY_MAX_ADDR; i++) {
+		printk("gzf bus->phy_mask=%x, BIT(i)=%x\n", bus->phy_mask, BIT(i));
 		if ((bus->phy_mask & BIT(i)) == 0) {
 			struct phy_device *phydev;
 
@@ -557,6 +564,7 @@ int __mdiobus_register(struct mii_bus *bus, struct module *owner)
 	bool prevent_c45_scan;
 	int i, err;
 
+	printk("gzf %s\n", __func__);
 	if (!bus || !bus->name)
 		return -EINVAL;
 
@@ -630,6 +638,7 @@ int __mdiobus_register(struct mii_bus *bus, struct module *owner)
 	}
 
 	if (bus->read) {
+		printk("gzf %s scan c22\n", __func__);
 		err = mdiobus_scan_bus_c22(bus);
 		if (err)
 			goto error;
@@ -638,6 +647,7 @@ int __mdiobus_register(struct mii_bus *bus, struct module *owner)
 	prevent_c45_scan = mdiobus_prevent_c45_scan(bus);
 
 	if (!prevent_c45_scan && bus->read_c45) {
+		printk("gzf %s scan c45\n", __func__);
 		err = mdiobus_scan_bus_c45(bus);
 		if (err)
 			goto error;

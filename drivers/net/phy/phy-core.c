@@ -491,6 +491,14 @@ int phy_read_mmd(struct phy_device *phydev, int devad, u32 regnum)
 {
 	int ret;
 
+	pr_info("gzf phy=%s addr=%d is_c45=%d bus=%s read=%ps read_c45=%ps\n",
+        phydev_name(phydev),
+        phydev->mdio.addr,
+        phydev->is_c45,
+        phydev->mdio.bus->name,
+        phydev->mdio.bus->read,
+        phydev->mdio.bus->read_c45);
+
 	phy_lock_mdio_bus(phydev);
 	ret = __phy_read_mmd(phydev, devad, regnum);
 	phy_unlock_mdio_bus(phydev);

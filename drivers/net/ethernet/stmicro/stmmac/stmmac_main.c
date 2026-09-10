@@ -1350,9 +1350,12 @@ static int stmmac_init_phy(struct net_device *dev)
 	} else {
 		fwnode_handle_put(phy_fwnode);
 		ret = phylink_fwnode_phy_connect(priv->phylink, fwnode, dev_flags);
+		printk("gzf %s phy_connect ret=%d\n", __func__, ret);
 	}
 
 	if (ret) {
+		netdev_err(priv->dev, "gzf cannot attach to PHY (error: %pe)\n",
+			   ERR_PTR(ret));
 		netdev_err(priv->dev, "cannot attach to PHY (error: %pe)\n",
 			   ERR_PTR(ret));
 		return ret;
