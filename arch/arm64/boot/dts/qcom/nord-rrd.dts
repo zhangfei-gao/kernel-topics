@@ -850,6 +850,10 @@
 			compatible = "ethernet-phy-id0141.0dd4";
 			reg = <0x8>;
 			device_type = "ethernet-phy";
+			interrupts-extended = <&tlmm 141 IRQ_TYPE_EDGE_FALLING>;
+			reset-gpios = <&pmau0102_e_gpios 5 GPIO_ACTIVE_LOW>;
+			reset-assert-us = <11000>;
+			reset-deassert-us = <70000>;
 		};
 	};
 
@@ -934,6 +938,10 @@
 			compatible = "ethernet-phy-id0141.0dd4";
 			reg = <0xa>;
 			device_type = "ethernet-phy";
+			interrupts-extended = <&tlmm 55 IRQ_TYPE_EDGE_FALLING>;
+			reset-gpios = <&pmau0102_f_gpios 7 GPIO_ACTIVE_LOW>;
+			reset-assert-us = <11000>;
+			reset-deassert-us = <70000>;
 		};
 	};
 
