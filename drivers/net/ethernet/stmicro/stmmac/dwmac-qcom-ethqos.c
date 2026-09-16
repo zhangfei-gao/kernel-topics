@@ -40,6 +40,7 @@
 #define RGMII_CONFIG_GPIO_CFG_TX_INT		GENMASK(19, 17)
 #define RGMII_CONFIG_MAX_SPD_PRG_9		GENMASK(16, 8)
 #define RGMII_CONFIG_MAX_SPD_PRG_2		GENMASK(7, 6)
+#define RGMII_CONFIG_MAX_SPD_PRG_2_V4		GENMASK(9, 6)
 #define RGMII_CONFIG_INTF_SEL			GENMASK(5, 4)
 #define RGMII_CONFIG_BYPASS_TX_ID_EN		BIT(3)
 #define RGMII_CONFIG_LOOPBACK_EN		BIT(2)
@@ -86,6 +87,12 @@
 #define RGMII_CONFIG2_DATA_DIVIDE_CLK_SEL	BIT(6)
 #define RGMII_CONFIG2_TX_CLK_PHASE_SHIFT_EN	BIT(5)
 #define RGMII_CONFIG2_MODE_EN_VIA_GMII		BIT(21)
+#define RGMII_CONFIG2_MAX_SPD_PRG_3		GENMASK(20, 17)
+
+/* RGMII_IO_MACRO_SCRATCH_2 fields */
+#define RGMII_SCRATCH2_MAX_SPD_PRG_4		GENMASK(5, 2)
+#define RGMII_SCRATCH2_MAX_SPD_PRG_5		GENMASK(9, 6)
+#define RGMII_SCRATCH2_MAX_SPD_PRG_6		GENMASK(13, 10)
 
 /* EMAC_WRAPPER_SGMII_PHY_CNTRL0 fields */
 #define SGMII_PHY_CNTRL0_2P5G_1G_CLK_SEL	GENMASK(6, 5)
@@ -557,14 +564,53 @@ static int ethqos_configure_usxgmii(struct qcom_ethqos *ethqos)
 	rgmii_updatel(ethqos, USXGMII_CLK_BLK_CLK_EN, 0,
 		      EMAC_WRAPPER_USXGMII_MUX_SEL);
 
-	if (ethqos->speed != SPEED_10000) {
+	switch (ethqos->speed) {
+	case SPEED_10000:
+		rgmii_updatel(ethqos, USXGMII_CLK_BLK_GMII_CLK_BLK_SEL,
+			      USXGMII_CLK_BLK_GMII_CLK_BLK_SEL,
+			      EMAC_WRAPPER_USXGMII_MUX_SEL);
+		break;
+	case SPEED_5000:
+		rgmii_updatel(ethqos, SGMII_PHY_CNTRL0_2P5G_1G_CLK_SEL, 0,
+			      EMAC_WRAPPER_SGMII_PHY_CNTRL0);
+		rgmii_updatel(ethqos, RGMII_CONFIG_MAX_SPD_PRG_2_V4,
+			      BIT(6) | BIT(7), RGMII_IO_MACRO_CONFIG);
+		rgmii_updatel(ethqos, RGMII_CONFIG2_MAX_SPD_PRG_3,
+			      BIT(17) | BIT(18), RGMII_IO_MACRO_CONFIG2);
+		break;
+	case SPEED_2500:
+		rgmii_updatel(ethqos, SGMII_PHY_CNTRL0_2P5G_1G_CLK_SEL, 0,
+			      EMAC_WRAPPER_SGMII_PHY_CNTRL0);
+		rgmii_updatel(ethqos, RGMII_CONFIG_SGMII_CLK_DVDR,
+			      BIT(10) | BIT(11), RGMII_IO_MACRO_CONFIG);
+		rgmii_updatel(ethqos, RGMII_SCRATCH2_MAX_SPD_PRG_4,
+			      BIT(2) | BIT(3), RGMII_IO_MACRO_SCRATCH_2);
+		rgmii_updatel(ethqos, RGMII_SCRATCH2_MAX_SPD_PRG_5, 0,
+			      RGMII_IO_MACRO_SCRATCH_2);
+		break;
+	case SPEED_1000:
+	case SPEED_100:
+		rgmii_updatel(ethqos, RGMII_CONFIG2_RGMII_CLK_SEL_CFG,
+			      RGMII_CONFIG2_RGMII_CLK_SEL_CFG,
+			      RGMII_IO_MACRO_CONFIG2);
+		if (ethqos->speed == SPEED_100) {
+			rgmii_updatel(ethqos, RGMII_CONFIG_MAX_SPD_PRG_2_V4,
+				      BIT(9), RGMII_IO_MACRO_CONFIG);
+			rgmii_updatel(ethqos, RGMII_CONFIG2_MAX_SPD_PRG_3,
+				      BIT(20), RGMII_IO_MACRO_CONFIG2);
+			rgmii_updatel(ethqos, RGMII_SCRATCH2_MAX_SPD_PRG_6,
+				      BIT(10), RGMII_IO_MACRO_SCRATCH_2);
+		}
+		break;
+	case SPEED_10:
+		rgmii_updatel(ethqos, RGMII_CONFIG2_RGMII_CLK_SEL_CFG,
+			      RGMII_CONFIG2_RGMII_CLK_SEL_CFG,
+			      RGMII_IO_MACRO_CONFIG2);
+		break;
+	default:
 		dev_err(dev, "unsupported USXGMII speed %d\n", ethqos->speed);
 		return -EINVAL;
 	}
-
-	rgmii_updatel(ethqos, USXGMII_CLK_BLK_GMII_CLK_BLK_SEL,
-		      USXGMII_CLK_BLK_GMII_CLK_BLK_SEL,
-		      EMAC_WRAPPER_USXGMII_MUX_SEL);
 
 	return 0;
 }
@@ -915,6 +961,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		plat_dat->mac_finish = ethqos_mac_finish_serdes;
 		break;
 	case PHY_INTERFACE_MODE_USXGMII:
+		plat_dat->default_an_inband = true;
+		fallthrough;
 	case PHY_INTERFACE_MODE_10GBASER:
 		plat_dat->fix_mac_speed = ethqos_fix_mac_speed_usxgmii;
 		break;
