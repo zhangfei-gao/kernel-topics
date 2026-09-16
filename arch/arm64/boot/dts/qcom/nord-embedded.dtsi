@@ -1595,8 +1595,8 @@
 		      <0x0 0x01a7f000 0x0 0x1000>;
 		reg-names = "stmmaceth", "rgmii";
 		interrupts = <GIC_SPI 821 IRQ_TYPE_LEVEL_HIGH>,
-			     <GIC_SPI 704 IRQ_TYPE_LEVEL_HIGH>;
-		interrupt-names = "macirq", "lpi";
+			     <GIC_SPI 713 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "macirq", "sfty";
 		clocks = <&segcc SE_GCC_EMAC0_AXI_CLK>,
 			 <&segcc SE_GCC_EMAC0_PTP_CLK>,
 			 <&segcc SE_GCC_EMAC0_PHY_AUX_CLK>,
@@ -1721,9 +1721,9 @@
 		reg = <0x0 0x01a80000 0x0 0x14000>,
 		      <0x0 0x01aff000 0x0 0x1000>;
 		reg-names = "stmmaceth", "rgmii";
-		interrupts = <GIC_SPI 852 IRQ_TYPE_LEVEL_HIGH>,
-			     <GIC_SPI 544 IRQ_TYPE_LEVEL_HIGH>;
-		interrupt-names = "macirq", "lpi";
+		interrupts = <GIC_SPI 820 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 361 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "macirq", "sfty";
 		clocks = <&segcc SE_GCC_EMAC1_AXI_CLK>,
 			 <&segcc SE_GCC_EMAC1_PTP_CLK>,
 			 <&segcc SE_GCC_EMAC1_PHY_AUX_CLK>,
