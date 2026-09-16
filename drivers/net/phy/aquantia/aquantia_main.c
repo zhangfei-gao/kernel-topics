@@ -1094,6 +1094,18 @@ static int aqr111_get_features(struct phy_device *phydev)
 	return 0;
 }
 
+static int aqr113c_get_features(struct phy_device *phydev)
+{
+	/* Generic C45 PMA abilities do not fully describe the PHY's copper
+	 * autonegotiation modes, so add the 10G mode explicitly.
+	 */
+	aqr111_get_features(phydev);
+	linkmode_set_bit(ETHTOOL_LINK_MODE_10000baseT_Full_BIT,
+			 phydev->supported);
+
+	return 0;
+}
+
 static int aqr_gen4_config_init(struct phy_device *phydev)
 {
 	struct aqr107_priv *priv = phydev->priv;
@@ -1111,6 +1123,29 @@ static int aqr_gen4_config_init(struct phy_device *phydev)
 		return ret;
 
 	return aqr_gen1_wait_processor_intensive_op(phydev);
+}
+
+/* AQR113/C needs TX enabled before reading the host interface modes. */
+static int aqr113c_config_init(struct phy_device *phydev)
+{
+	struct aqr107_priv *priv = phydev->priv;
+	int ret;
+
+	priv->wait_on_global_cfg = true;
+
+	ret = aqr_gen1_config_init(phydev);
+	if (ret)
+		return ret;
+
+	ret = phy_clear_bits_mmd(phydev, MDIO_MMD_PMAPMD, MDIO_PMA_TXDIS,
+				 MDIO_PMD_TXDIS_GLOBAL);
+	if (ret)
+		return ret;
+	ret = aqr_gen1_wait_processor_intensive_op(phydev);
+	if (ret)
+		return ret;
+
+	return aqr_gen2_fill_interface_modes(phydev);
 }
 
 static unsigned int aqr_gen2_inband_caps(struct phy_device *phydev,
@@ -1432,7 +1467,7 @@ static struct phy_driver aqr_driver[] = {
 	.name           = "Aquantia AQR113C",
 	.probe          = aqr107_probe,
 	.get_rate_matching = aqr_gen2_get_rate_matching,
-	.config_init    = aqr_gen4_config_init,
+	.config_init    = aqr113c_config_init,
 	.config_aneg    = aqr_config_aneg,
 	.config_intr    = aqr_config_intr,
 	.handle_interrupt       = aqr_handle_interrupt,
@@ -1444,6 +1479,7 @@ static struct phy_driver aqr_driver[] = {
 	.get_sset_count = aqr107_get_sset_count,
 	.get_strings    = aqr107_get_strings,
 	.get_stats      = aqr107_get_stats,
+	.get_features   = aqr113c_get_features,
 	.link_change_notify = aqr107_link_change_notify,
 	.led_brightness_set = aqr_phy_led_brightness_set,
 	.led_hw_is_supported = aqr_phy_led_hw_is_supported,
