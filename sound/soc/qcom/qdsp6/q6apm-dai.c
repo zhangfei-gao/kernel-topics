@@ -417,10 +417,10 @@ static int q6apm_dai_open(struct snd_soc_component *component,
 		}
 	}
 
-	/* setup 10ms latency to accommodate DSP restrictions */
-	ret = snd_pcm_hw_constraint_step(runtime, 0, SNDRV_PCM_HW_PARAM_PERIOD_SIZE, 480);
+	/* Use a 10 ms period at 48 kHz to accommodate DSP restrictions. */
+	ret = snd_pcm_hw_constraint_single(runtime, SNDRV_PCM_HW_PARAM_PERIOD_SIZE, 480);
 	if (ret < 0) {
-		dev_err(dev, "constraint for period bytes step ret = %d\n", ret);
+		dev_err(dev, "constraint for period size ret = %d\n", ret);
 		goto err;
 	}
 
