@@ -70,14 +70,14 @@
 			codec {
 				dai-tdm-slot-num = <8>;
 				dai-tdm-slot-width = <32>;
-				dai-tdm-slot-rx-mask = <1 1>;
+				dai-tdm-slot-rx-mask = <1 1 1 1 1 1>;
 				sound-dai = <&pcm1681>;
 			};
 
 			cpu {
 				dai-tdm-slot-num = <8>;
 				dai-tdm-slot-width = <32>;
-				dai-tdm-slot-tx-mask = <1 1>;
+				dai-tdm-slot-tx-mask = <1 1 1 1 1 1>;
 				sound-dai = <&q6apmbedai AIF_TDM_RX_8>;
 			};
 
@@ -92,14 +92,14 @@
 			codec {
 				dai-tdm-slot-num = <8>;
 				dai-tdm-slot-width = <32>;
-				dai-tdm-slot-rx-mask = <1 1>;
+				dai-tdm-slot-rx-mask = <1 1 1 1>;
 				sound-dai = <&adau1979>;
 			};
 
 			cpu {
 				dai-tdm-slot-num = <8>;
 				dai-tdm-slot-width = <32>;
-				dai-tdm-slot-rx-mask = <1 1>;
+				dai-tdm-slot-rx-mask = <1 1 1 1>;
 				sound-dai = <&q6apmbedai AIF_TDM_TX_8>;
 			};
 
