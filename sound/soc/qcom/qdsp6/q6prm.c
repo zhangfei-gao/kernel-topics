@@ -10,6 +10,7 @@
 #include <linux/of_platform.h>
 #include <linux/jiffies.h>
 #include <linux/soc/qcom/apr.h>
+#include <linux/workqueue.h>
 #include <dt-bindings/soc/qcom,gpr.h>
 #include <dt-bindings/sound/qcom,q6dsp-lpass-ports.h>
 #include "q6apm.h"
@@ -22,6 +23,9 @@ struct q6prm {
 	wait_queue_head_t wait;
 	struct gpr_ibasic_rsp_result_t result;
 	struct mutex lock;
+	struct delayed_work apm_ready_work;
+	unsigned int apm_ready_attempts;
+	bool children_populated;
 };
 
 #define PRM_CMD_REQUEST_HW_RSC		0x0100100F
@@ -34,6 +38,8 @@ struct q6prm {
 #define PARAM_ID_RSC_CPU_LPR		0x08001A6E
 
 #define LPR_CPU_SS_SLEEP_DISABLE	0x1
+#define Q6PRM_APM_RETRY_DELAY_MS	1000
+#define Q6PRM_APM_READY_RETRIES		3
 
 struct prm_cmd_request_hw_core {
 	struct apm_module_param_data param_data;
@@ -209,6 +215,34 @@ static int prm_callback(const struct gpr_resp_pkt *data, void *priv, int op)
 	return 0;
 }
 
+static void q6prm_apm_ready_work(struct work_struct *work)
+{
+	struct q6prm *cc = container_of(to_delayed_work(work), struct q6prm,
+					 apm_ready_work);
+	int ret;
+
+	cc->apm_ready_attempts++;
+	if (!q6apm_is_adsp_ready()) {
+		if (cc->apm_ready_attempts < Q6PRM_APM_READY_RETRIES) {
+			schedule_delayed_work(&cc->apm_ready_work,
+					      msecs_to_jiffies(Q6PRM_APM_RETRY_DELAY_MS));
+			return;
+		}
+
+		dev_err(cc->dev, "APM did not become ready after %u attempts\n",
+			cc->apm_ready_attempts);
+		return;
+	}
+
+	ret = of_platform_populate(cc->dev->of_node, NULL, NULL, cc->dev);
+	if (ret) {
+		dev_err(cc->dev, "failed to populate PRM children: %d\n", ret);
+		return;
+	}
+
+	cc->children_populated = true;
+}
+
 static int prm_probe(gpr_device_t *gdev)
 {
 	struct device *dev = &gdev->dev;
@@ -222,12 +256,21 @@ static int prm_probe(gpr_device_t *gdev)
 	cc->gdev = gdev;
 	mutex_init(&cc->lock);
 	init_waitqueue_head(&cc->wait);
+	INIT_DELAYED_WORK(&cc->apm_ready_work, q6prm_apm_ready_work);
 	dev_set_drvdata(dev, cc);
 
-	if (!q6apm_is_adsp_ready())
-		return -EPROBE_DEFER;
+	schedule_delayed_work(&cc->apm_ready_work, 0);
 
-	return devm_of_platform_populate(dev);
+	return 0;
+}
+
+static void prm_remove(gpr_device_t *gdev)
+{
+	struct q6prm *cc = dev_get_drvdata(&gdev->dev);
+
+	cancel_delayed_work_sync(&cc->apm_ready_work);
+	if (cc->children_populated)
+		of_platform_depopulate(&gdev->dev);
 }
 
 #ifdef CONFIG_OF
@@ -240,6 +283,7 @@ MODULE_DEVICE_TABLE(of, prm_device_id);
 
 static gpr_driver_t prm_driver = {
 	.probe = prm_probe,
+	.remove = prm_remove,
 	.gpr_callback = prm_callback,
 	.driver = {
 		.name = "qcom-prm",
