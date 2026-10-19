@@ -45,6 +45,8 @@
  * complete its internal reset sequence before it is ready to be used.
  */
 #define PCM1681_SCK_SETTLE_CYCLES	65536
+#define PCM1681_I2C_READY_DELAY_MS	500
+#define PCM1681_I2C_READY_RETRIES	10
 
 static const struct reg_default pcm1681_reg_defaults[] = {
 	{ 0x01,	0xff },
@@ -106,6 +108,29 @@ static void pcm1681_sck_settle(struct pcm1681_private *priv)
 	if (rate)
 		fsleep(DIV_ROUND_UP_ULL(PCM1681_SCK_SETTLE_CYCLES *
 					(u64)USEC_PER_SEC, rate));
+}
+
+static int pcm1681_wait_for_i2c(struct pcm1681_private *priv)
+{
+	unsigned int attempt;
+	unsigned int val;
+	int ret = -ENXIO;
+
+	/* Register reads may NACK until the initial power-on sequence completes. */
+	for (attempt = 1; attempt <= PCM1681_I2C_READY_RETRIES; attempt++) {
+		/* Bypass the cache so the readiness check always reaches I2C. */
+		regcache_cache_bypass(priv->regmap, true);
+		ret = regmap_read(priv->regmap, PCM1681_FMT_CONTROL, &val);
+		regcache_cache_bypass(priv->regmap, false);
+
+		if (ret != -ENXIO)
+			return ret;
+
+		if (attempt < PCM1681_I2C_READY_RETRIES)
+			msleep(PCM1681_I2C_READY_DELAY_MS);
+	}
+
+	return ret;
 }
 
 static const int pcm1681_deemph[] = { 44100, 48000, 32000 };
@@ -368,6 +393,12 @@ static int pcm1681_component_probe(struct snd_soc_component *component)
 		goto err_disable;
 	}
 
+	ret = pcm1681_wait_for_i2c(priv);
+	if (ret) {
+		dev_err(dev, "Failed waiting for I2C readiness: %d\n", ret);
+		goto err_disable;
+	}
+
 	/* The clock is on, so hand the now-active device over to runtime PM */
 	pm_runtime_set_active(dev);
 	pm_runtime_enable(dev);
@@ -376,6 +407,7 @@ static int pcm1681_component_probe(struct snd_soc_component *component)
 	return 0;
 
 err_disable:
+	regcache_cache_only(priv->regmap, true);
 	clk_disable_unprepare(priv->sck);
 err_put:
 	clk_put(priv->sck);
