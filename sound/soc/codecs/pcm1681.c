@@ -45,7 +45,6 @@
  * complete its internal reset sequence before it is ready to be used.
  */
 #define PCM1681_SCK_SETTLE_CYCLES	65536
-#define PCM1681_POWER_ON_DELAY_US	300000
 
 static const struct reg_default pcm1681_reg_defaults[] = {
 	{ 0x01,	0xff },
@@ -359,8 +358,6 @@ static int pcm1681_component_probe(struct snd_soc_component *component)
 	}
 
 	pcm1681_sck_settle(priv);
-	/* Allow the power-on sequence to complete before gating sck. */
-	fsleep(PCM1681_POWER_ON_DELAY_US);
 
 	/* The DAC lost its state if sck went away while unbound */
 	regcache_cache_only(priv->regmap, false);
