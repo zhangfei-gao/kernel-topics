@@ -2759,6 +2759,32 @@
 			};
 		};
 
+		eud: eud@88e7000 {
+			compatible = "qcom,sc7280-eud", "qcom,eud";
+			reg = <0 0x088e7000 0 0x2000>,
+			      <0 0x088e9000 0 0x1000>;
+			interrupts-extended = <&pdc 11 IRQ_TYPE_LEVEL_HIGH>;
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+
+					eud_ep: endpoint {
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+
+					eud_con: endpoint {
+					};
+				};
+			};
+		};
+
 		/* Display subsystem nodes - MDSS1, DP-only (no DSI) */
 		mdss1: display-subsystem@8c00000 {
 			compatible = "qcom,nord-mdss";

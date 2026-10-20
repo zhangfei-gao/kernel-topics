@@ -705,6 +705,14 @@
 	firmware-name = "qcom/nord/gen71300_zap.mbn";
 };
 
+&eud_con {
+	remote-endpoint = <&usb_0_con_hs>;
+};
+
+&eud_ep {
+	remote-endpoint = <&usb_0_dwc3_hs>;
+};
+
 &i2c9 {
 	clock-frequency = <400000>;
 
@@ -764,7 +772,7 @@
 					reg = <0>;
 
 					usb_0_con_hs: endpoint {
-						remote-endpoint = <&usb_0_dwc3_hs>;
+						remote-endpoint = <&eud_con>;
 					};
 				};
 
@@ -1121,7 +1129,7 @@
 };
 
 &usb_0_dwc3_hs {
-	remote-endpoint = <&usb_0_con_hs>;
+	remote-endpoint = <&eud_ep>;
 };
 
 &usb_0_hsphy {
