@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/phy/qcom,sa8797p-snps-eusb2-phy.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm SA8797P Synopsys eUSB2 PHY
+
+maintainers:
+  - Hiren Gohel <hiren.gohel@oss.qualcomm.com>
+
+description:
+  The Qualcomm SA8797P platform delegates control of the eUSB2 PHY clocks,
+  reset, and other platform resources to firmware. The SCMI power protocol
+  exposes two power domains for the PHY. The core domain controls the PHY
+  power, reset, and clocks, while the transfer domain controls the clocks used
+  for data transfer. The SCMI performance domain is not required for PHY
+  operation and its opaque performance values are not part of this binding.
+
+properties:
+  compatible:
+    const: qcom,sa8797p-snps-eusb2-phy
+
+  reg:
+    maxItems: 1
+
+  "#phy-cells":
+    const: 0
+
+  power-domains:
+    items:
+      - description: Core domain controlling PHY power, reset, and clocks
+      - description: Transfer domain controlling the data-transfer clocks
+
+  power-domain-names:
+    items:
+      - const: core
+      - const: transfer
+
+  phys:
+    maxItems: 1
+    description:
+      Phandle to the eUSB2 to USB 2.0 repeater.
+
+required:
+  - compatible
+  - reg
+  - "#phy-cells"
+  - power-domains
+  - power-domain-names
+
+additionalProperties: false
+
+examples:
+  - |
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        phy@88e3000 {
+            compatible = "qcom,sa8797p-snps-eusb2-phy";
+            reg = <0x0 0x088e3000 0x0 0x154>;
+            #phy-cells = <0>;
+
+            power-domains = <&scmi12_pd 1>, <&scmi12_pd 0>;
+            power-domain-names = "core", "transfer";
+        };
+    };
