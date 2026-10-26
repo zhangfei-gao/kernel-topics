@@ -9,6 +9,8 @@
 #include <linux/iopoll.h>
 #include <linux/phy/phy.h>
 #include <linux/platform_device.h>
+#include <linux/pm_domain.h>
+#include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
 #include <linux/reset.h>
 
@@ -157,9 +159,11 @@ struct snps_eusb2_phy_drvdata {
 	int (*phy_init)(struct phy *p);
 	const char * const *clk_names;
 	int num_clks;
+	bool fw_managed;
 };
 
 struct snps_eusb2_hsphy {
+	struct device *dev;
 	struct phy *phy;
 	void __iomem *base;
 
@@ -174,7 +178,51 @@ struct snps_eusb2_hsphy {
 	struct phy *repeater;
 
 	const struct snps_eusb2_phy_drvdata *data;
+	struct dev_pm_domain_list *pd_list;
 };
+
+static int snps_eusb2_hsphy_domain_attach(struct snps_eusb2_hsphy *phy)
+{
+	struct dev_pm_domain_attach_data pd_data = {
+		.pd_flags = PD_FLAG_NO_DEV_LINK,
+		.pd_names = (const char *[]) { "core", "transfer" },
+		.num_pd_names = 2,
+	};
+	int ret;
+
+	ret = devm_pm_domain_attach_list(phy->dev, &pd_data, &phy->pd_list);
+	if (ret < 0)
+		return dev_err_probe(phy->dev, ret,
+				     "failed to attach power domains\n");
+	if (ret != pd_data.num_pd_names)
+		return dev_err_probe(phy->dev, -ENODEV,
+				     "failed to find power domains\n");
+
+	return 0;
+}
+
+static int snps_eusb2_hsphy_d3_to_d0(struct snps_eusb2_hsphy *phy)
+{
+	int ret;
+
+	ret = pm_runtime_resume_and_get(phy->pd_list->pd_devs[0]);
+	if (ret < 0)
+		return ret;
+
+	ret = pm_runtime_resume_and_get(phy->pd_list->pd_devs[1]);
+	if (ret < 0) {
+		pm_runtime_put_sync(phy->pd_list->pd_devs[0]);
+		return ret;
+	}
+
+	return 0;
+}
+
+static void snps_eusb2_hsphy_d0_to_d3(struct snps_eusb2_hsphy *phy)
+{
+	pm_runtime_put_sync(phy->pd_list->pd_devs[1]);
+	pm_runtime_put_sync(phy->pd_list->pd_devs[0]);
+}
 
 static int snps_eusb2_hsphy_set_mode(struct phy *p, enum phy_mode mode, int submode)
 {
@@ -274,15 +322,25 @@ static int exynos_eusb2_ref_clk_init(struct snps_eusb2_hsphy *phy)
 	return 0;
 }
 
+#define QCOM_EUSB2_REF_CLK_19P2_HZ	19200000UL
+#define QCOM_EUSB2_REF_CLK_38P4_HZ	38400000UL
+
 static const struct snps_eusb2_ref_clk qcom_eusb2_ref_clk[] = {
-	{ 19200000, FSEL_19_2_MHZ_VAL, DIV_7_0_19_2_MHZ_VAL, DIV_11_8_19_2_MHZ_VAL },
-	{ 38400000, FSEL_38_4_MHZ_VAL, DIV_7_0_38_4_MHZ_VAL, DIV_11_8_38_4_MHZ_VAL },
+	{ QCOM_EUSB2_REF_CLK_19P2_HZ, FSEL_19_2_MHZ_VAL,
+	  DIV_7_0_19_2_MHZ_VAL, DIV_11_8_19_2_MHZ_VAL },
+	{ QCOM_EUSB2_REF_CLK_38P4_HZ, FSEL_38_4_MHZ_VAL,
+	  DIV_7_0_38_4_MHZ_VAL, DIV_11_8_38_4_MHZ_VAL },
 };
 
 static int qcom_eusb2_ref_clk_init(struct snps_eusb2_hsphy *phy)
 {
 	const struct snps_eusb2_ref_clk *config = NULL;
-	unsigned long ref_clk_freq = clk_get_rate(phy->ref_clk);
+	unsigned long ref_clk_freq;
+
+	if (phy->data->fw_managed)
+		ref_clk_freq = QCOM_EUSB2_REF_CLK_38P4_HZ;
+	else
+		ref_clk_freq = clk_get_rate(phy->ref_clk);
 
 	for (int i = 0; i < ARRAY_SIZE(qcom_eusb2_ref_clk); i++) {
 		if (qcom_eusb2_ref_clk[i].freq == ref_clk_freq) {
@@ -462,19 +520,31 @@ static const struct snps_eusb2_phy_drvdata nord_snps_eusb2_phy = {
 	.num_clks	= ARRAY_SIZE(nord_eusb2_hsphy_clock_names),
 };
 
+static const struct snps_eusb2_phy_drvdata sa8797p_snps_eusb2_phy = {
+	.phy_init	= qcom_snps_eusb2_hsphy_init,
+	.fw_managed	= true,
+};
+
 static int snps_eusb2_hsphy_init(struct phy *p)
 {
 	struct snps_eusb2_hsphy *phy = phy_get_drvdata(p);
 	int ret;
 
-	ret = regulator_bulk_enable(ARRAY_SIZE(phy->vregs), phy->vregs);
-	if (ret)
-		return ret;
+	if (phy->data->fw_managed) {
+		ret = snps_eusb2_hsphy_d3_to_d0(phy);
+		if (ret)
+			return dev_err_probe(phy->dev, ret,
+					     "failed to power on PHY\n");
+	} else {
+		ret = regulator_bulk_enable(ARRAY_SIZE(phy->vregs), phy->vregs);
+		if (ret)
+			return ret;
+	}
 
 	ret = phy_init(phy->repeater);
 	if (ret) {
 		dev_err(&p->dev, "repeater init failed: %d\n", ret);
-		goto disable_vreg;
+		goto power_off;
 	}
 
 	ret = clk_bulk_prepare_enable(phy->data->num_clks, phy->clks);
@@ -507,8 +577,11 @@ disable_clks:
 	clk_bulk_disable_unprepare(phy->data->num_clks, phy->clks);
 exit_repeater:
 	phy_exit(phy->repeater);
-disable_vreg:
-	regulator_bulk_disable(ARRAY_SIZE(phy->vregs), phy->vregs);
+power_off:
+	if (phy->data->fw_managed)
+		snps_eusb2_hsphy_d0_to_d3(phy);
+	else
+		regulator_bulk_disable(ARRAY_SIZE(phy->vregs), phy->vregs);
 
 	return ret;
 }
@@ -519,9 +592,13 @@ static int snps_eusb2_hsphy_exit(struct phy *p)
 
 	clk_bulk_disable_unprepare(phy->data->num_clks, phy->clks);
 
-	regulator_bulk_disable(ARRAY_SIZE(phy->vregs), phy->vregs);
+	if (!phy->data->fw_managed)
+		regulator_bulk_disable(ARRAY_SIZE(phy->vregs), phy->vregs);
 
 	phy_exit(phy->repeater);
+
+	if (phy->data->fw_managed)
+		snps_eusb2_hsphy_d0_to_d3(phy);
 
 	return 0;
 }
@@ -547,6 +624,7 @@ static int snps_eusb2_hsphy_probe(struct platform_device *pdev)
 	if (!phy)
 		return -ENOMEM;
 
+	phy->dev = dev;
 	phy->data = device_get_match_data(dev);
 	if (!phy->data)
 		return -EINVAL;
@@ -555,44 +633,50 @@ static int snps_eusb2_hsphy_probe(struct platform_device *pdev)
 	if (IS_ERR(phy->base))
 		return PTR_ERR(phy->base);
 
-	phy->phy_reset = devm_reset_control_get_optional_exclusive(dev, NULL);
-	if (IS_ERR(phy->phy_reset))
-		return PTR_ERR(phy->phy_reset);
+	if (phy->data->fw_managed) {
+		ret = snps_eusb2_hsphy_domain_attach(phy);
+		if (ret)
+			return ret;
+	} else {
+		phy->phy_reset = devm_reset_control_get_optional_exclusive(dev, NULL);
+		if (IS_ERR(phy->phy_reset))
+			return PTR_ERR(phy->phy_reset);
 
-	phy->clks = devm_kzalloc_objs(dev, *phy->clks, phy->data->num_clks);
-	if (!phy->clks)
-		return -ENOMEM;
+		phy->clks = devm_kzalloc_objs(dev, *phy->clks,
+					       phy->data->num_clks);
+		if (!phy->clks)
+			return -ENOMEM;
 
-	for (i = 0; i < phy->data->num_clks; ++i)
-		phy->clks[i].id = phy->data->clk_names[i];
+		for (i = 0; i < phy->data->num_clks; ++i)
+			phy->clks[i].id = phy->data->clk_names[i];
 
-	ret = devm_clk_bulk_get(dev, phy->data->num_clks, phy->clks);
-	if (ret)
-		return dev_err_probe(dev, ret,
-				     "failed to get phy clock(s)\n");
+		ret = devm_clk_bulk_get(dev, phy->data->num_clks, phy->clks);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					     "failed to get phy clock(s)\n");
 
-	phy->ref_clk = NULL;
-	for (i = 0; i < phy->data->num_clks; ++i) {
-		if (!strcmp(phy->clks[i].id, "ref")) {
-			phy->ref_clk = phy->clks[i].clk;
-			break;
+		for (i = 0; i < phy->data->num_clks; ++i) {
+			if (!strcmp(phy->clks[i].id, "ref")) {
+				phy->ref_clk = phy->clks[i].clk;
+				break;
+			}
 		}
+
+		if (IS_ERR_OR_NULL(phy->ref_clk)) {
+			ret = phy->ref_clk ? PTR_ERR(phy->ref_clk) : -ENOENT;
+			return dev_err_probe(dev, ret,
+					     "failed to get ref clk\n");
+		}
+
+		num = ARRAY_SIZE(phy->vregs);
+		for (i = 0; i < num; i++)
+			phy->vregs[i].supply = eusb2_hsphy_vreg_names[i];
+
+		ret = devm_regulator_bulk_get(dev, num, phy->vregs);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					     "failed to get regulator supplies\n");
 	}
-
-	if (IS_ERR_OR_NULL(phy->ref_clk)) {
-		ret = phy->ref_clk ? PTR_ERR(phy->ref_clk) : -ENOENT;
-		return dev_err_probe(dev, ret,
-				     "failed to get ref clk\n");
-	}
-
-	num = ARRAY_SIZE(phy->vregs);
-	for (i = 0; i < num; i++)
-		phy->vregs[i].supply = eusb2_hsphy_vreg_names[i];
-
-	ret = devm_regulator_bulk_get(dev, num, phy->vregs);
-	if (ret)
-		return dev_err_probe(dev, ret,
-				     "failed to get regulator supplies\n");
 
 	phy->repeater = devm_of_phy_optional_get(dev, np, NULL);
 	if (IS_ERR(phy->repeater))
@@ -601,11 +685,12 @@ static int snps_eusb2_hsphy_probe(struct platform_device *pdev)
 
 	generic_phy = devm_phy_create(dev, NULL, &snps_eusb2_hsphy_ops);
 	if (IS_ERR(generic_phy)) {
-		dev_err(dev, "failed to create phy: %d\n", ret);
+		dev_err(dev, "failed to create phy: %pe\n", generic_phy);
 		return PTR_ERR(generic_phy);
 	}
 
 	dev_set_drvdata(dev, phy);
+	phy->phy = generic_phy;
 	phy_set_drvdata(generic_phy, phy);
 
 	phy_provider = devm_of_phy_provider_register(dev, of_phy_simple_xlate);
@@ -617,6 +702,9 @@ static int snps_eusb2_hsphy_probe(struct platform_device *pdev)
 
 static const struct of_device_id snps_eusb2_hsphy_of_match_table[] = {
 	{
+		.compatible = "qcom,sa8797p-snps-eusb2-phy",
+		.data = &sa8797p_snps_eusb2_phy,
+	}, {
 		.compatible = "qcom,nord-snps-eusb2-phy",
 		.data = &nord_snps_eusb2_phy,
 	}, {
