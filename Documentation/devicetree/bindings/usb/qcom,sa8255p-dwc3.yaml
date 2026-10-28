@@ -4,14 +4,14 @@
 $id: http://devicetree.org/schemas/usb/qcom,sa8255p-dwc3.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
-title: Qualcomm SA8255P USB3 Controller with Firmware-Managed Resources
+title: Qualcomm Automotive USB3 Controller with Firmware-Managed Resources
 
 maintainers:
   - Wesley Cheng <wesley.cheng@oss.qualcomm.com>
   - Faisal Hassan <faisal.hassan@oss.qualcomm.com>
 
 description:
-  USB controller on Qualcomm SA8255P automotive SoC where platform resources
+  USB controller on Qualcomm automotive SoCs where platform resources
   such as clocks, interconnects, resets, regulators and the GDSC are
   abstracted and managed collectively by firmware through SCMI (System
   Control and Management Interface).
@@ -24,7 +24,9 @@ description:
 
 properties:
   compatible:
-    const: qcom,sa8255p-dwc3
+    enum:
+      - qcom,sa8255p-dwc3
+      - qcom,sa8797p-dwc3
 
   reg:
     maxItems: 1
