@@ -1,0 +1,472 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ */
+
+/dts-v1/;
+
+#include "nord-gearvm.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. IQ10 RRD GearVM";
+	compatible = "qcom,iq10-rrd", "qcom,nord";
+
+	aliases {
+		i2c18 = &i2c18;
+		scmichannels = &scmichannels;
+		serial0 = &uart15;
+		serial1 = &uart4;
+		spi16 = &spi16;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	clocks {
+		xo_board_clk: xo-board-clk {
+			compatible = "fixed-clock";
+			clock-frequency = <38400000>;
+			#clock-cells = <0>;
+		};
+
+		sleep_clk: sleep-clk {
+			compatible = "fixed-clock";
+			clock-frequency = <32000>;
+			#clock-cells = <0>;
+		};
+	};
+};
+
+&reserved_memory {
+	/delete-node/ scmi-shmem@d7600000;
+	/delete-node/ scmi-shmem@d7601000;
+	/delete-node/ scmi-shmem@d7602000;
+	/delete-node/ scmi-shmem@d7603000;
+	/delete-node/ scmi-shmem@d7604000;
+	/delete-node/ scmi-shmem@d7605000;
+	/delete-node/ scmi-shmem@d7606000;
+	/delete-node/ scmi-shmem@d7607000;
+	/delete-node/ scmi-shmem@d7608000;
+	/delete-node/ scmi-shmem@d7609000;
+	/delete-node/ scmi-shmem@d760a000;
+	/delete-node/ scmi-shmem@d760b000;
+	/delete-node/ scmi-shmem@d760c000;
+	/delete-node/ scmi-shmem@d760d000;
+	/delete-node/ scmi-shmem@d760e000;
+	/delete-node/ scmi-shmem@d760f000;
+	/delete-node/ scmi-shmem@d7610000;
+	/delete-node/ scmi-shmem@d7611000;
+	/delete-node/ scmi-shmem@d7612000;
+	/delete-node/ scmi-shmem@d7613000;
+	/delete-node/ scmi-shmem@d7614000;
+	/delete-node/ scmi-shmem@d7615000;
+	/delete-node/ scmi-shmem@d7616000;
+	/delete-node/ scmi-shmem@d7617000;
+	/delete-node/ scmi-shmem@d7618000;
+	/delete-node/ scmi-shmem@d7619000;
+	/delete-node/ scmi-shmem@d761a000;
+	/delete-node/ scmi-shmem@d761b000;
+	/delete-node/ scmi-shmem@d761c000;
+	/delete-node/ scmi-shmem@d761d000;
+	/delete-node/ scmi-shmem@d761e000;
+	/delete-node/ scmi-shmem@d761f000;
+	/delete-node/ scmi-shmem@d7620000;
+	/delete-node/ scmi-shmem@d7621000;
+	/delete-node/ scmi-shmem@d7622000;
+	/delete-node/ scmi-shmem@d7623000;
+	/delete-node/ scmi-shmem@d7624000;
+	/delete-node/ scmi-shmem@d7625000;
+	/delete-node/ scmi-shmem@d7626000;
+	/delete-node/ scmi-shmem@d7627000;
+	/delete-node/ scmi-shmem@d7628000;
+	/delete-node/ scmi-shmem@d7629000;
+	/delete-node/ scmi-shmem@d762a000;
+	/delete-node/ scmi-shmem@d762b000;
+	/delete-node/ scmi-shmem@d762c000;
+	/delete-node/ scmi-shmem@d762d000;
+	/delete-node/ scmi-shmem@d762e000;
+	/delete-node/ scmi-shmem@d762f000;
+	/delete-node/ scmi-shmem@d7630000;
+	/delete-node/ scmi-shmem@d7631000;
+	/delete-node/ scmi-shmem@d7632000;
+	/delete-node/ scmi-shmem@d7633000;
+	/delete-node/ scmi-shmem@d7634000;
+	/delete-node/ scmi-shmem@d7635000;
+	/delete-node/ scmi-shmem@d7636000;
+	/delete-node/ scmi-shmem@d7637000;
+	/delete-node/ scmi-shmem@d7638000;
+	/delete-node/ scmi-shmem@d7639000;
+	/delete-node/ scmi-shmem@d763a000;
+	/delete-node/ scmi-shmem@d763b000;
+	/delete-node/ scmi-shmem@d763c000;
+	/delete-node/ scmi-shmem@d763d000;
+	/delete-node/ scmi-shmem@d763e000;
+	/delete-node/ scmi-shmem@d763f000;
+};
+
+&soc {
+	scmichannels: sram@d7600000 {
+		compatible = "mmio-sram";
+		reg = <0x0 0xd7600000 0x0 0x40000>;
+		ranges = <0x0 0x0 0x0 0xffffffff>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		shmem0: scmi-sram@d7600000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7600000 0x1000>;
+		};
+
+		shmem1: scmi-sram@d7601000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7601000 0x1000>;
+		};
+
+		shmem2: scmi-sram@d7602000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7602000 0x1000>;
+		};
+
+		shmem3: scmi-sram@d7603000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7603000 0x1000>;
+		};
+
+		shmem4: scmi-sram@d7604000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7604000 0x1000>;
+		};
+
+		shmem5: scmi-sram@d7605000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7605000 0x1000>;
+		};
+
+		shmem6: scmi-sram@d7606000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7606000 0x1000>;
+		};
+
+		shmem7: scmi-sram@d7607000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7607000 0x1000>;
+		};
+
+		shmem8: scmi-sram@d7608000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7608000 0x1000>;
+		};
+
+		shmem9: scmi-sram@d7609000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7609000 0x1000>;
+		};
+
+		shmem10: scmi-sram@d760a000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd760a000 0x1000>;
+		};
+
+		shmem11: scmi-sram@d760b000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd760b000 0x1000>;
+		};
+
+		shmem12: scmi-sram@d760c000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd760c000 0x1000>;
+		};
+
+		shmem13: scmi-sram@d760d000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd760d000 0x1000>;
+		};
+
+		shmem14: scmi-sram@d760e000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd760e000 0x1000>;
+		};
+
+		shmem15: scmi-sram@d760f000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd760f000 0x1000>;
+		};
+
+		shmem16: scmi-sram@d7610000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7610000 0x1000>;
+		};
+
+		shmem17: scmi-sram@d7611000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7611000 0x1000>;
+		};
+
+		shmem18: scmi-sram@d7612000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7612000 0x1000>;
+		};
+
+		shmem19: scmi-sram@d7613000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7613000 0x1000>;
+		};
+
+		shmem20: scmi-sram@d7614000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7614000 0x1000>;
+		};
+
+		shmem21: scmi-sram@d7615000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7615000 0x1000>;
+		};
+
+		shmem22: scmi-sram@d7616000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7616000 0x1000>;
+		};
+
+		shmem23: scmi-sram@d7617000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7617000 0x1000>;
+		};
+
+		shmem24: scmi-sram@d7618000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7618000 0x1000>;
+		};
+
+		shmem25: scmi-sram@d7619000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7619000 0x1000>;
+		};
+
+		shmem26: scmi-sram@d761a000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd761a000 0x1000>;
+		};
+
+		shmem27: scmi-sram@d761b000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd761b000 0x1000>;
+		};
+
+		shmem28: scmi-sram@d761c000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd761c000 0x1000>;
+		};
+
+		shmem29: scmi-sram@d761d000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd761d000 0x1000>;
+		};
+
+		shmem30: scmi-sram@d761e000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd761e000 0x1000>;
+		};
+
+		shmem31: scmi-sram@d761f000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd761f000 0x1000>;
+		};
+
+		shmem32: scmi-sram@d7620000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7620000 0x1000>;
+		};
+
+		shmem33: scmi-sram@d7621000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7621000 0x1000>;
+		};
+
+		shmem34: scmi-sram@d7622000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7622000 0x1000>;
+		};
+
+		shmem35: scmi-sram@d7623000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7623000 0x1000>;
+		};
+
+		shmem36: scmi-sram@d7624000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7624000 0x1000>;
+		};
+
+		shmem37: scmi-sram@d7625000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7625000 0x1000>;
+		};
+
+		shmem38: scmi-sram@d7626000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7626000 0x1000>;
+		};
+
+		shmem39: scmi-sram@d7627000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7627000 0x1000>;
+		};
+
+		shmem40: scmi-sram@d7628000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7628000 0x1000>;
+		};
+
+		shmem41: scmi-sram@d7629000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7629000 0x1000>;
+		};
+
+		shmem42: scmi-sram@d762a000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd762a000 0x1000>;
+		};
+
+		shmem43: scmi-sram@d762b000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd762b000 0x1000>;
+		};
+
+		shmem44: scmi-sram@d762c000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd762c000 0x1000>;
+		};
+
+		shmem45: scmi-sram@d762d000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd762d000 0x1000>;
+		};
+
+		shmem46: scmi-sram@d762e000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd762e000 0x1000>;
+		};
+
+		shmem47: scmi-sram@d762f000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd762f000 0x1000>;
+		};
+
+		shmem48: scmi-sram@d7630000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7630000 0x1000>;
+		};
+
+		shmem49: scmi-sram@d7631000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7631000 0x1000>;
+		};
+
+		shmem50: scmi-sram@d7632000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7632000 0x1000>;
+		};
+
+		shmem51: scmi-sram@d7633000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7633000 0x1000>;
+		};
+
+		shmem52: scmi-sram@d7634000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7634000 0x1000>;
+		};
+
+		shmem53: scmi-sram@d7635000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7635000 0x1000>;
+		};
+
+		shmem54: scmi-sram@d7636000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7636000 0x1000>;
+		};
+
+		shmem55: scmi-sram@d7637000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7637000 0x1000>;
+		};
+
+		shmem56: scmi-sram@d7638000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7638000 0x1000>;
+		};
+
+		shmem57: scmi-sram@d7639000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd7639000 0x1000>;
+		};
+
+		shmem58: scmi-sram@d763a000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd763a000 0x1000>;
+		};
+
+		shmem59: scmi-sram@d763b000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd763b000 0x1000>;
+		};
+
+		shmem60: scmi-sram@d763c000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd763c000 0x1000>;
+		};
+
+		shmem61: scmi-sram@d763d000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd763d000 0x1000>;
+		};
+
+		shmem62: scmi-sram@d763e000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd763e000 0x1000>;
+		};
+
+		shmem63: scmi-sram@d763f000 {
+			compatible = "arm,scmi-shmem";
+			reg = <0xd763f000 0x1000>;
+		};
+	};
+};
+
+&i2c18 {
+	status = "okay";
+};
+
+&scmi3 {
+	status = "okay";
+};
+
+&scmi9 {
+	status = "okay";
+};
+
+&scmi10 {
+	status = "okay";
+};
+
+&scmi11 {
+	status = "okay";
+};
+
+&spi16 {
+	status = "okay";
+};
+
+&uart4 {
+	status = "okay";
+};
+
+&uart15 {
+	status = "okay";
+};
+
+&ufs_mem_hc {
+	status = "okay";
+};
