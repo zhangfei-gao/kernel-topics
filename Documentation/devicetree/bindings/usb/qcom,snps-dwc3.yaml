@@ -52,6 +52,7 @@ properties:
           - qcom,qcs8300-dwc3
           - qcom,qdu1000-dwc3
           - qcom,sa8775p-dwc3
+          - qcom,sa8797p-dwc3
           - qcom,sar2130p-dwc3
           - qcom,sc7180-dwc3
           - qcom,sc7280-dwc3
@@ -86,7 +87,13 @@ properties:
     maxItems: 1
 
   power-domains:
-    maxItems: 1
+    minItems: 1
+    maxItems: 2
+
+  power-domain-names:
+    items:
+      - const: transfer
+      - const: core
 
   required-opps:
     maxItems: 1
@@ -163,13 +170,34 @@ properties:
 required:
   - compatible
   - reg
-  - clocks
-  - clock-names
   - interrupts
   - interrupt-names
 
 allOf:
   - $ref: snps,dwc3-common.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: qcom,sa8797p-dwc3
+    then:
+      required:
+        - power-domains
+        - power-domain-names
+      properties:
+        clocks: false
+        clock-names: false
+        resets: false
+        interconnects: false
+        interconnect-names: false
+    else:
+      required:
+        - clocks
+        - clock-names
+      properties:
+        power-domains:
+          maxItems: 1
+
   - if:
       properties:
         compatible:
