@@ -41,6 +41,18 @@
 	status = "okay";
 };
 
+&scmi0 {
+	status = "okay";
+};
+
+&scmi1 {
+	status = "okay";
+};
+
+&scmi2 {
+	status = "okay";
+};
+
 &scmi3 {
 	status = "okay";
 };
@@ -54,6 +66,18 @@
 };
 
 &scmi11 {
+	status = "okay";
+};
+
+&scmi12 {
+	status = "okay";
+};
+
+&scmi13 {
+	status = "okay";
+};
+
+&scmi14 {
 	status = "okay";
 };
 
@@ -250,5 +274,37 @@
 };
 
 &ufs_mem_hc {
+	status = "okay";
+};
+
+&usb_0 {
+	status = "okay";
+};
+
+&usb_0_eusbphy {
+	status = "okay";
+};
+
+&usb_0_qmpphy {
+	status = "okay";
+};
+
+&usb_1 {
+	status = "okay";
+};
+
+&usb_1_eusbphy {
+	status = "okay";
+};
+
+&usb_1_qmpphy {
+	status = "okay";
+};
+
+&usb_2 {
+	status = "okay";
+};
+
+&usb_2_eusbphy {
 	status = "okay";
 };
