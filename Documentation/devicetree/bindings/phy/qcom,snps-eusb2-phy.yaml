@@ -25,6 +25,7 @@ properties:
               - qcom,sm8650-snps-eusb2-phy
               - qcom,x1e80100-snps-eusb2-phy
           - const: qcom,sm8550-snps-eusb2-phy
+      - const: qcom,sa8797p-snps-eusb2-phy
       - const: qcom,sm8550-snps-eusb2-phy
 
   reg:
@@ -48,6 +49,15 @@ properties:
   resets:
     maxItems: 1
 
+  power-domains:
+    minItems: 2
+    maxItems: 2
+
+  power-domain-names:
+    items:
+      - const: transfer
+      - const: core
+
   phys:
     maxItems: 1
     description:
@@ -65,18 +75,37 @@ required:
   - compatible
   - reg
   - "#phy-cells"
-  - clocks
-  - clock-names
-  - vdd-supply
-  - vdda12-supply
 
 allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: qcom,sa8797p-snps-eusb2-phy
+    then:
+      required:
+        - power-domains
+        - power-domain-names
+      properties:
+        clocks: false
+        clock-names: false
+        resets: false
+        vdd-supply: false
+        vdda12-supply: false
+    else:
+      required:
+        - clocks
+        - clock-names
+        - vdd-supply
+        - vdda12-supply
   - if:
       not:
         properties:
           compatible:
             contains:
-              const: qcom,nord-snps-eusb2-phy
+              enum:
+                - qcom,nord-snps-eusb2-phy
+                - qcom,sa8797p-snps-eusb2-phy
     then:
       required:
         - resets
