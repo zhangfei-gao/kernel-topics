@@ -16,6 +16,7 @@
 #include <linux/of_graph.h>
 #include <linux/phy/phy.h>
 #include <linux/platform_device.h>
+#include <linux/pm_domain.h>
 #include <linux/regulator/consumer.h>
 #include <linux/reset.h>
 #include <linux/slab.h>
@@ -2650,7 +2651,56 @@ struct qmp_combo {
 	enum typec_orientation orientation;
 
 	struct typec_mux_dev *mux;
+	struct dev_pm_domain_list *pd_list;
+	bool fw_managed;
 };
+
+static int qmp_combo_domain_attach(struct qmp_combo *qmp)
+{
+	struct dev_pm_domain_attach_data pd_data = {
+		.pd_flags = PD_FLAG_NO_DEV_LINK,
+		.pd_names = (const char *[]) { "transfer", "core" },
+		.num_pd_names = 2,
+	};
+	int ret;
+
+	ret = devm_pm_domain_attach_list(qmp->dev, &pd_data, &qmp->pd_list);
+	if (ret < 0)
+		return ret;
+
+	return qmp->pd_list ? 0 : -ENODEV;
+}
+
+static int qmp_combo_d3_to_d0(struct qmp_combo *qmp)
+{
+	int ret;
+
+	ret = pm_runtime_resume_and_get(qmp->pd_list->pd_devs[1]);
+	if (ret < 0)
+		return ret;
+
+	ret = pm_runtime_resume_and_get(qmp->pd_list->pd_devs[0]);
+	if (ret < 0)
+		pm_runtime_put_sync(qmp->pd_list->pd_devs[1]);
+
+	return ret;
+}
+
+static void qmp_combo_d0_to_d3(struct qmp_combo *qmp)
+{
+	pm_runtime_put_sync(qmp->pd_list->pd_devs[0]);
+	pm_runtime_put_sync(qmp->pd_list->pd_devs[1]);
+}
+
+static int qmp_combo_d1_to_d0(struct qmp_combo *qmp)
+{
+	return pm_runtime_resume_and_get(qmp->pd_list->pd_devs[0]);
+}
+
+static void qmp_combo_d0_to_d1(struct qmp_combo *qmp)
+{
+	pm_runtime_put_sync(qmp->pd_list->pd_devs[0]);
+}
 
 static void qmp_v3_dp_aux_init(struct qmp_combo *qmp);
 static void qmp_v3_configure_dp_tx(struct qmp_combo *qmp);
@@ -4099,6 +4149,12 @@ static int qmp_combo_com_init(struct qmp_combo *qmp, bool force)
 	if (!force && qmp->init_count++)
 		return 0;
 
+	if (qmp->fw_managed) {
+		ret = qmp_combo_d3_to_d0(qmp);
+		if (ret)
+			goto err_decrement_count;
+	}
+
 	if (qmp->aon_toggle)
 		aon_toggle = qmp->aon_toggle;
 	else
@@ -4114,33 +4170,36 @@ static int qmp_combo_com_init(struct qmp_combo *qmp, bool force)
 			dp_reset_val &= ~SW_DPPHY_RESET_MUX;
 	}
 
-	ret = regulator_bulk_enable(cfg->num_vregs, qmp->vregs);
-	if (ret) {
-		dev_err(qmp->dev, "failed to enable regulators, err=%d\n", ret);
-		goto err_decrement_count;
-	}
+	if (!qmp->fw_managed) {
+		ret = regulator_bulk_enable(cfg->num_vregs, qmp->vregs);
+		if (ret) {
+			dev_err(qmp->dev,
+				"failed to enable regulators, err=%d\n", ret);
+			goto err_power_off;
+		}
 
-	ret = reset_control_bulk_assert(cfg->num_resets, qmp->resets);
-	if (ret) {
-		dev_err(qmp->dev, "reset assert failed\n");
-		goto err_disable_regulators;
-	}
+		ret = reset_control_bulk_assert(cfg->num_resets, qmp->resets);
+		if (ret) {
+			dev_err(qmp->dev, "reset assert failed\n");
+			goto err_disable_regulators;
+		}
 
-	ret = reset_control_bulk_deassert(cfg->num_resets, qmp->resets);
-	if (ret) {
-		dev_err(qmp->dev, "reset deassert failed\n");
-		goto err_disable_regulators;
-	}
+		ret = reset_control_bulk_deassert(cfg->num_resets, qmp->resets);
+		if (ret) {
+			dev_err(qmp->dev, "reset deassert failed\n");
+			goto err_disable_regulators;
+		}
 
-	ret = clk_bulk_prepare_enable(qmp->num_clks, qmp->clks);
-	if (ret)
-		goto err_assert_reset;
+		ret = clk_bulk_prepare_enable(qmp->num_clks, qmp->clks);
+		if (ret)
+			goto err_assert_reset;
 
-	/* In DP-only mode, the pipe clk is still required for USB2 */
-	ret = clk_prepare_enable(qmp->pipe_clk);
-	if (ret) {
-		dev_err(qmp->dev, "pipe_clk enable failed err=%d\n", ret);
-		goto err_disable_clocks;
+		/* In DP-only mode, the pipe clk is still required for USB2 */
+		ret = clk_prepare_enable(qmp->pipe_clk);
+		if (ret) {
+			dev_err(qmp->dev, "pipe_clk enable failed err=%d\n", ret);
+			goto err_disable_clocks;
+		}
 	}
 
 	qphy_setbits(com, QPHY_V3_DP_COM_POWER_DOWN_CTRL, SW_PWRDN);
@@ -4224,6 +4283,9 @@ err_assert_reset:
 	reset_control_bulk_assert(cfg->num_resets, qmp->resets);
 err_disable_regulators:
 	regulator_bulk_disable(cfg->num_vregs, qmp->vregs);
+err_power_off:
+	if (qmp->fw_managed)
+		qmp_combo_d0_to_d3(qmp);
 err_decrement_count:
 	qmp->init_count--;
 
@@ -4237,12 +4299,14 @@ static int qmp_combo_com_exit(struct qmp_combo *qmp, bool force)
 	if (!force && --qmp->init_count)
 		return 0;
 
-	reset_control_bulk_assert(cfg->num_resets, qmp->resets);
-
-	clk_disable_unprepare(qmp->pipe_clk);
-	clk_bulk_disable_unprepare(qmp->num_clks, qmp->clks);
-
-	regulator_bulk_disable(cfg->num_vregs, qmp->vregs);
+	if (qmp->fw_managed) {
+		qmp_combo_d0_to_d3(qmp);
+	} else {
+		reset_control_bulk_assert(cfg->num_resets, qmp->resets);
+		clk_disable_unprepare(qmp->pipe_clk);
+		clk_bulk_disable_unprepare(qmp->num_clks, qmp->clks);
+		regulator_bulk_disable(cfg->num_vregs, qmp->vregs);
+	}
 
 	return 0;
 }
@@ -4413,7 +4477,8 @@ static int qmp_combo_usb_power_on(struct phy *phy)
 	return 0;
 
 err_disable_pipe_clk:
-	clk_disable_unprepare(qmp->pipe_clk);
+	if (!qmp->fw_managed)
+		clk_disable_unprepare(qmp->pipe_clk);
 
 	return ret;
 }
@@ -4724,8 +4789,12 @@ static int __maybe_unused qmp_combo_runtime_suspend(struct device *dev)
 
 	qmp_combo_enable_autonomous_mode(qmp);
 
-	clk_disable_unprepare(qmp->pipe_clk);
-	clk_bulk_disable_unprepare(qmp->num_clks, qmp->clks);
+	if (qmp->fw_managed) {
+		qmp_combo_d0_to_d1(qmp);
+	} else {
+		clk_disable_unprepare(qmp->pipe_clk);
+		clk_bulk_disable_unprepare(qmp->num_clks, qmp->clks);
+	}
 
 	return 0;
 }
@@ -4742,15 +4811,21 @@ static int __maybe_unused qmp_combo_runtime_resume(struct device *dev)
 		return 0;
 	}
 
-	ret = clk_bulk_prepare_enable(qmp->num_clks, qmp->clks);
-	if (ret)
-		return ret;
+	if (qmp->fw_managed) {
+		ret = qmp_combo_d1_to_d0(qmp);
+		if (ret)
+			return ret;
+	} else {
+		ret = clk_bulk_prepare_enable(qmp->num_clks, qmp->clks);
+		if (ret)
+			return ret;
 
-	ret = clk_prepare_enable(qmp->pipe_clk);
-	if (ret) {
-		dev_err(dev, "pipe_clk enable failed, err=%d\n", ret);
-		clk_bulk_disable_unprepare(qmp->num_clks, qmp->clks);
-		return ret;
+		ret = clk_prepare_enable(qmp->pipe_clk);
+		if (ret) {
+			dev_err(dev, "pipe_clk enable failed, err=%d\n", ret);
+			clk_bulk_disable_unprepare(qmp->num_clks, qmp->clks);
+			return ret;
+		}
 	}
 
 	qmp_combo_disable_autonomous_mode(qmp);
@@ -5294,10 +5369,12 @@ static int qmp_combo_parse_dt_legacy_usb(struct qmp_combo *qmp, struct device_no
 		qmp->pcs_misc = NULL;
 	}
 
-	qmp->pipe_clk = devm_get_clk_from_child(dev, np, NULL);
-	if (IS_ERR(qmp->pipe_clk)) {
-		return dev_err_probe(dev, PTR_ERR(qmp->pipe_clk),
-				     "failed to get pipe clock\n");
+	if (!qmp->fw_managed) {
+		qmp->pipe_clk = devm_get_clk_from_child(dev, np, NULL);
+		if (IS_ERR(qmp->pipe_clk)) {
+			return dev_err_probe(dev, PTR_ERR(qmp->pipe_clk),
+					     "failed to get pipe clock\n");
+		}
 	}
 
 	return 0;
@@ -5329,11 +5406,13 @@ static int qmp_combo_parse_dt_legacy(struct qmp_combo *qmp, struct device_node *
 	if (ret)
 		return ret;
 
-	ret = devm_clk_bulk_get_all(qmp->dev, &qmp->clks);
-	if (ret < 0)
-		return ret;
+	if (!qmp->fw_managed) {
+		ret = devm_clk_bulk_get_all(qmp->dev, &qmp->clks);
+		if (ret < 0)
+			return ret;
 
-	qmp->num_clks = ret;
+		qmp->num_clks = ret;
+	}
 
 	return 0;
 }
@@ -5383,20 +5462,24 @@ static int qmp_combo_parse_dt(struct qmp_combo *qmp)
 	qmp->usb4_serdes = base + offs->usb4_serdes;
 	qmp->usb4_pcs = base + offs->usb4_pcs;
 
-	ret = qmp_combo_clk_init(qmp);
-	if (ret)
-		return ret;
+	if (!qmp->fw_managed) {
+		ret = qmp_combo_clk_init(qmp);
+		if (ret)
+			return ret;
 
-	qmp->pipe_clk = devm_clk_get(dev, "usb3_pipe");
-	if (IS_ERR(qmp->pipe_clk)) {
-		return dev_err_probe(dev, PTR_ERR(qmp->pipe_clk),
-				"failed to get usb3_pipe clock\n");
-	}
+		qmp->pipe_clk = devm_clk_get(dev, "usb3_pipe");
+		if (IS_ERR(qmp->pipe_clk)) {
+			return dev_err_probe(dev, PTR_ERR(qmp->pipe_clk),
+					     "failed to get usb3_pipe clock\n");
+		}
 
-	qmp->p2rr2p_pipe_clk = devm_clk_get_optional(dev, "p2rr2p_pipe");
-	if (IS_ERR(qmp->p2rr2p_pipe_clk)) {
-		return dev_err_probe(dev, PTR_ERR(qmp->p2rr2p_pipe_clk),
-				     "failed to get p2rr2p_pipe clock\n");
+		qmp->p2rr2p_pipe_clk = devm_clk_get_optional(dev,
+							     "p2rr2p_pipe");
+		if (IS_ERR(qmp->p2rr2p_pipe_clk)) {
+			return dev_err_probe(dev,
+					     PTR_ERR(qmp->p2rr2p_pipe_clk),
+					     "failed to get p2rr2p_pipe clock\n");
+		}
 	}
 
 	return 0;
@@ -5519,17 +5602,27 @@ static int qmp_combo_probe(struct platform_device *pdev)
 	qmp->cfg = of_device_get_match_data(dev);
 	if (!qmp->cfg)
 		return -EINVAL;
+	qmp->fw_managed = device_is_compatible(dev, "qcom,sa8797p-qmp-usb3-dp-phy");
+
+	if (qmp->fw_managed) {
+		ret = qmp_combo_domain_attach(qmp);
+		if (ret < 0)
+			return dev_err_probe(dev, ret,
+					     "failed to attach power domains\n");
+	}
 
 	mutex_init(&qmp->phy_mutex);
 
-	ret = qmp_combo_reset_init(qmp);
-	if (ret)
-		return ret;
+	if (!qmp->fw_managed) {
+		ret = qmp_combo_reset_init(qmp);
+		if (ret)
+			return ret;
 
-	ret = devm_regulator_bulk_get_const(dev, qmp->cfg->num_vregs,
-					qmp->cfg->vreg_list, &qmp->vregs);
-	if (ret)
-		return ret;
+		ret = devm_regulator_bulk_get_const(dev, qmp->cfg->num_vregs,
+						    qmp->cfg->vreg_list, &qmp->vregs);
+		if (ret)
+			return ret;
+	}
 
 	/* Check for legacy binding with child nodes. */
 	usb_np = of_get_child_by_name(dev->of_node, "usb3-phy");
@@ -5606,9 +5699,11 @@ static int qmp_combo_probe(struct platform_device *pdev)
 	 */
 	pm_runtime_forbid(dev);
 
-	ret = qmp_combo_register_clocks(qmp, usb_np, dp_np);
-	if (ret)
-		goto err_pm_put;
+	if (!qmp->fw_managed) {
+		ret = qmp_combo_register_clocks(qmp, usb_np, dp_np);
+		if (ret)
+			goto err_pm_put;
+	}
 
 	qmp->usb_phy = devm_phy_create(dev, usb_np, &qmp_combo_usb_phy_ops);
 	if (IS_ERR(qmp->usb_phy)) {
@@ -5675,6 +5770,10 @@ static const struct of_device_id qmp_combo_of_match_table[] = {
 	},
 	{
 		.compatible = "qcom,nord-qmp-usb3-dp-phy",
+		.data = &nord_usb3dpphy_cfg,
+	},
+	{
+		.compatible = "qcom,sa8797p-qmp-usb3-dp-phy",
 		.data = &nord_usb3dpphy_cfg,
 	},
 	{
