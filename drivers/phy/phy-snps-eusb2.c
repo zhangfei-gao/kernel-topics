@@ -9,6 +9,7 @@
 #include <linux/iopoll.h>
 #include <linux/phy/phy.h>
 #include <linux/platform_device.h>
+#include <linux/pm_domain.h>
 #include <linux/regulator/consumer.h>
 #include <linux/reset.h>
 
@@ -172,9 +173,49 @@ struct snps_eusb2_hsphy {
 	enum phy_mode mode;
 
 	struct phy *repeater;
+	struct dev_pm_domain_list *pd_list;
 
 	const struct snps_eusb2_phy_drvdata *data;
+	bool fw_managed;
 };
+
+static int snps_eusb2_domain_attach(struct snps_eusb2_hsphy *phy)
+{
+	struct dev_pm_domain_attach_data pd_data = {
+		.pd_flags = PD_FLAG_NO_DEV_LINK,
+		.pd_names = (const char *[]) { "transfer", "core" },
+		.num_pd_names = 2,
+	};
+	int ret;
+
+	ret = devm_pm_domain_attach_list(phy->phy->dev.parent, &pd_data,
+					 &phy->pd_list);
+	if (ret < 0)
+		return ret;
+
+	return phy->pd_list ? 0 : -ENODEV;
+}
+
+static int snps_eusb2_d3_to_d0(struct snps_eusb2_hsphy *phy)
+{
+	int ret;
+
+	ret = pm_runtime_resume_and_get(phy->pd_list->pd_devs[1]);
+	if (ret < 0)
+		return ret;
+
+	ret = pm_runtime_resume_and_get(phy->pd_list->pd_devs[0]);
+	if (ret < 0)
+		pm_runtime_put_sync(phy->pd_list->pd_devs[1]);
+
+	return ret;
+}
+
+static void snps_eusb2_d0_to_d3(struct snps_eusb2_hsphy *phy)
+{
+	pm_runtime_put_sync(phy->pd_list->pd_devs[0]);
+	pm_runtime_put_sync(phy->pd_list->pd_devs[1]);
+}
 
 static int snps_eusb2_hsphy_set_mode(struct phy *p, enum phy_mode mode, int submode)
 {
@@ -274,15 +315,20 @@ static int exynos_eusb2_ref_clk_init(struct snps_eusb2_hsphy *phy)
 	return 0;
 }
 
+#define QCOM_EUSB2_REF_CLK_19P2_HZ	19200000UL
+#define QCOM_EUSB2_REF_CLK_38P4_HZ	38400000UL
+
 static const struct snps_eusb2_ref_clk qcom_eusb2_ref_clk[] = {
-	{ 19200000, FSEL_19_2_MHZ_VAL, DIV_7_0_19_2_MHZ_VAL, DIV_11_8_19_2_MHZ_VAL },
-	{ 38400000, FSEL_38_4_MHZ_VAL, DIV_7_0_38_4_MHZ_VAL, DIV_11_8_38_4_MHZ_VAL },
+	{ QCOM_EUSB2_REF_CLK_19P2_HZ, FSEL_19_2_MHZ_VAL,
+	  DIV_7_0_19_2_MHZ_VAL, DIV_11_8_19_2_MHZ_VAL },
+	{ QCOM_EUSB2_REF_CLK_38P4_HZ, FSEL_38_4_MHZ_VAL,
+	  DIV_7_0_38_4_MHZ_VAL, DIV_11_8_38_4_MHZ_VAL },
 };
 
-static int qcom_eusb2_ref_clk_init(struct snps_eusb2_hsphy *phy)
+static int qcom_eusb2_ref_clk_init(struct snps_eusb2_hsphy *phy,
+				   unsigned long ref_clk_freq)
 {
 	const struct snps_eusb2_ref_clk *config = NULL;
-	unsigned long ref_clk_freq = clk_get_rate(phy->ref_clk);
 
 	for (int i = 0; i < ARRAY_SIZE(qcom_eusb2_ref_clk); i++) {
 		if (qcom_eusb2_ref_clk[i].freq == ref_clk_freq) {
@@ -384,8 +430,12 @@ static int qcom_snps_eusb2_hsphy_init(struct phy *p)
 	snps_eusb2_hsphy_write_mask(phy->base, QCOM_USB_PHY_FSEL_SEL,
 				    FSEL_SEL, FSEL_SEL);
 
-	/* update ref_clk related registers */
-	ret = qcom_eusb2_ref_clk_init(phy);
+	if (phy->fw_managed)
+		ret = qcom_eusb2_ref_clk_init(phy,
+					      QCOM_EUSB2_REF_CLK_38P4_HZ);
+	else
+		ret = qcom_eusb2_ref_clk_init(phy,
+					      clk_get_rate(phy->ref_clk));
 	if (ret)
 		return ret;
 
@@ -467,9 +517,18 @@ static int snps_eusb2_hsphy_init(struct phy *p)
 	struct snps_eusb2_hsphy *phy = phy_get_drvdata(p);
 	int ret;
 
-	ret = regulator_bulk_enable(ARRAY_SIZE(phy->vregs), phy->vregs);
-	if (ret)
-		return ret;
+	if (phy->fw_managed) {
+		ret = snps_eusb2_d3_to_d0(phy);
+		if (ret)
+			return dev_err_probe(&p->dev, ret,
+					     "failed to transition to D0\n");
+	}
+
+	if (!phy->fw_managed) {
+		ret = regulator_bulk_enable(ARRAY_SIZE(phy->vregs), phy->vregs);
+		if (ret)
+			goto power_off;
+	}
 
 	ret = phy_init(phy->repeater);
 	if (ret) {
@@ -477,24 +536,26 @@ static int snps_eusb2_hsphy_init(struct phy *p)
 		goto disable_vreg;
 	}
 
-	ret = clk_bulk_prepare_enable(phy->data->num_clks, phy->clks);
-	if (ret) {
-		dev_err(&p->dev, "failed to enable ref clock: %d\n", ret);
-		goto exit_repeater;
-	}
+	if (!phy->fw_managed) {
+		ret = clk_bulk_prepare_enable(phy->data->num_clks, phy->clks);
+		if (ret) {
+			dev_err(&p->dev, "failed to enable ref clock: %d\n", ret);
+			goto exit_repeater;
+		}
 
-	ret = reset_control_assert(phy->phy_reset);
-	if (ret) {
-		dev_err(&p->dev, "failed to assert phy_reset: %d\n", ret);
-		goto disable_clks;
-	}
+		ret = reset_control_assert(phy->phy_reset);
+		if (ret) {
+			dev_err(&p->dev, "failed to assert phy_reset: %d\n", ret);
+			goto disable_clks;
+		}
 
-	usleep_range(100, 150);
+		usleep_range(100, 150);
 
-	ret = reset_control_deassert(phy->phy_reset);
-	if (ret) {
-		dev_err(&p->dev, "failed to de-assert phy_reset: %d\n", ret);
-		goto disable_clks;
+		ret = reset_control_deassert(phy->phy_reset);
+		if (ret) {
+			dev_err(&p->dev, "failed to de-assert phy_reset: %d\n", ret);
+			goto disable_clks;
+		}
 	}
 
 	ret = phy->data->phy_init(p);
@@ -504,11 +565,16 @@ static int snps_eusb2_hsphy_init(struct phy *p)
 	return 0;
 
 disable_clks:
-	clk_bulk_disable_unprepare(phy->data->num_clks, phy->clks);
+	if (!phy->fw_managed)
+		clk_bulk_disable_unprepare(phy->data->num_clks, phy->clks);
 exit_repeater:
 	phy_exit(phy->repeater);
 disable_vreg:
-	regulator_bulk_disable(ARRAY_SIZE(phy->vregs), phy->vregs);
+	if (!phy->fw_managed)
+		regulator_bulk_disable(ARRAY_SIZE(phy->vregs), phy->vregs);
+power_off:
+	if (phy->fw_managed)
+		snps_eusb2_d0_to_d3(phy);
 
 	return ret;
 }
@@ -517,11 +583,14 @@ static int snps_eusb2_hsphy_exit(struct phy *p)
 {
 	struct snps_eusb2_hsphy *phy = phy_get_drvdata(p);
 
-	clk_bulk_disable_unprepare(phy->data->num_clks, phy->clks);
-
-	regulator_bulk_disable(ARRAY_SIZE(phy->vregs), phy->vregs);
+	if (!phy->fw_managed) {
+		clk_bulk_disable_unprepare(phy->data->num_clks, phy->clks);
+		regulator_bulk_disable(ARRAY_SIZE(phy->vregs), phy->vregs);
+	}
 
 	phy_exit(phy->repeater);
+	if (phy->fw_managed)
+		snps_eusb2_d0_to_d3(phy);
 
 	return 0;
 }
@@ -555,45 +624,53 @@ static int snps_eusb2_hsphy_probe(struct platform_device *pdev)
 	if (IS_ERR(phy->base))
 		return PTR_ERR(phy->base);
 
-	phy->phy_reset = devm_reset_control_get_optional_exclusive(dev, NULL);
-	if (IS_ERR(phy->phy_reset))
-		return PTR_ERR(phy->phy_reset);
+	phy->fw_managed = device_is_compatible(dev, "qcom,sa8797p-snps-eusb2-phy");
 
-	phy->clks = devm_kcalloc(dev, phy->data->num_clks, sizeof(*phy->clks),
-				 GFP_KERNEL);
-	if (!phy->clks)
-		return -ENOMEM;
-
-	for (i = 0; i < phy->data->num_clks; ++i)
-		phy->clks[i].id = phy->data->clk_names[i];
-
-	ret = devm_clk_bulk_get(dev, phy->data->num_clks, phy->clks);
-	if (ret)
-		return dev_err_probe(dev, ret,
-				     "failed to get phy clock(s)\n");
-
-	phy->ref_clk = NULL;
-	for (i = 0; i < phy->data->num_clks; ++i) {
-		if (!strcmp(phy->clks[i].id, "ref")) {
-			phy->ref_clk = phy->clks[i].clk;
-			break;
-		}
+	if (!phy->fw_managed) {
+		phy->phy_reset = devm_reset_control_get_optional_exclusive(dev, NULL);
+		if (IS_ERR(phy->phy_reset))
+			return PTR_ERR(phy->phy_reset);
 	}
 
-	if (IS_ERR_OR_NULL(phy->ref_clk)) {
-		ret = phy->ref_clk ? PTR_ERR(phy->ref_clk) : -ENOENT;
-		return dev_err_probe(dev, ret,
-				     "failed to get ref clk\n");
+	if (!phy->fw_managed) {
+		phy->clks = devm_kcalloc(dev, phy->data->num_clks,
+					 sizeof(*phy->clks), GFP_KERNEL);
+		if (!phy->clks)
+			return -ENOMEM;
+
+		for (i = 0; i < phy->data->num_clks; ++i)
+			phy->clks[i].id = phy->data->clk_names[i];
+
+		ret = devm_clk_bulk_get(dev, phy->data->num_clks, phy->clks);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					     "failed to get phy clock(s)\n");
+
+		phy->ref_clk = NULL;
+		for (i = 0; i < phy->data->num_clks; ++i) {
+			if (!strcmp(phy->clks[i].id, "ref")) {
+				phy->ref_clk = phy->clks[i].clk;
+				break;
+			}
+		}
+
+		if (IS_ERR_OR_NULL(phy->ref_clk)) {
+			ret = phy->ref_clk ? PTR_ERR(phy->ref_clk) : -ENOENT;
+			return dev_err_probe(dev, ret,
+					     "failed to get ref clk\n");
+		}
 	}
 
 	num = ARRAY_SIZE(phy->vregs);
 	for (i = 0; i < num; i++)
 		phy->vregs[i].supply = eusb2_hsphy_vreg_names[i];
 
-	ret = devm_regulator_bulk_get(dev, num, phy->vregs);
-	if (ret)
-		return dev_err_probe(dev, ret,
-				     "failed to get regulator supplies\n");
+	if (!phy->fw_managed) {
+		ret = devm_regulator_bulk_get(dev, num, phy->vregs);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					     "failed to get regulator supplies\n");
+	}
 
 	phy->repeater = devm_of_phy_optional_get(dev, np, NULL);
 	if (IS_ERR(phy->repeater))
@@ -608,6 +685,14 @@ static int snps_eusb2_hsphy_probe(struct platform_device *pdev)
 
 	dev_set_drvdata(dev, phy);
 	phy_set_drvdata(generic_phy, phy);
+	phy->phy = generic_phy;
+
+	if (phy->fw_managed) {
+		ret = snps_eusb2_domain_attach(phy);
+		if (ret < 0)
+			return dev_err_probe(dev, ret,
+					     "failed to attach power domains\n");
+	}
 
 	phy_provider = devm_of_phy_provider_register(dev, of_phy_simple_xlate);
 	if (IS_ERR(phy_provider))
@@ -618,6 +703,9 @@ static int snps_eusb2_hsphy_probe(struct platform_device *pdev)
 
 static const struct of_device_id snps_eusb2_hsphy_of_match_table[] = {
 	{
+		.compatible = "qcom,sa8797p-snps-eusb2-phy",
+		.data = &nord_snps_eusb2_phy,
+	}, {
 		.compatible = "qcom,nord-snps-eusb2-phy",
 		.data = &nord_snps_eusb2_phy,
 	}, {
