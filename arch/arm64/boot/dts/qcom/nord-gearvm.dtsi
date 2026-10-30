@@ -3,6 +3,8 @@
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
+#include <dt-bindings/phy/phy-qcom-qmp.h>
+
 #include "nord.dtsi"
 
 &firmware {
@@ -2845,4 +2847,106 @@
 	compatible = "qcom,sa8797p-ufshc",
 		     "qcom,sa8255p-ufshc";
 	power-domains = <&scmi3_pd 0>;
+};
+
+&soc {
+	usb_2_eusbphy: phy@88e0000 {
+		compatible = "qcom,sa8797p-snps-eusb2-phy";
+		reg = <0x0 0x088e0000 0x0 0x154>;
+		#phy-cells = <0>;
+
+		power-domains = <&scmi14_pd 0>, <&scmi14_pd 1>;
+		power-domain-names = "transfer", "core";
+
+		status = "disabled";
+	};
+
+	usb_0_qmpphy: phy@88e1000 {
+		compatible = "qcom,sa8797p-qmp-usb3-dp-phy";
+		reg = <0x0 0x088e1000 0x0 0x3000>;
+		#phy-cells = <1>;
+
+		power-domains = <&scmi12_pd 2>, <&scmi12_pd 3>;
+		power-domain-names = "transfer", "core";
+
+		status = "disabled";
+	};
+
+	usb_1_qmpphy: phy@88e4000 {
+		compatible = "qcom,sa8797p-qmp-usb3-dp-phy";
+		reg = <0x0 0x088e4000 0x0 0x3000>;
+		#phy-cells = <1>;
+
+		power-domains = <&scmi13_pd 2>, <&scmi13_pd 3>;
+		power-domain-names = "transfer", "core";
+
+		status = "disabled";
+	};
+
+	usb_0_eusbphy: phy@88ea000 {
+		compatible = "qcom,sa8797p-snps-eusb2-phy";
+		reg = <0x0 0x088ea000 0x0 0x154>;
+		#phy-cells = <0>;
+
+		power-domains = <&scmi12_pd 0>, <&scmi12_pd 1>;
+		power-domain-names = "transfer", "core";
+
+	status = "disabled";
+};
+
+	usb_1_eusbphy: phy@88eb000 {
+		compatible = "qcom,sa8797p-snps-eusb2-phy";
+		reg = <0x0 0x088eb000 0x0 0x154>;
+		#phy-cells = <0>;
+
+		power-domains = <&scmi13_pd 0>, <&scmi13_pd 1>;
+		power-domain-names = "transfer", "core";
+
+		status = "disabled";
+	};
+};
+
+&usb_0 {
+	compatible = "qcom,sa8797p-dwc3",
+		     "qcom,snps-dwc3";
+
+	power-domains = <&scmi0_pd 0>, <&scmi0_pd 1>;
+	power-domain-names = "transfer", "core";
+
+	phys = <&usb_0_eusbphy>,
+	       <&usb_0_qmpphy QMP_USB43DP_USB3_PHY>;
+	phy-names = "usb2-phy", "usb3-phy";
+
+	maximum-speed = "super-speed-plus";
+	dr_mode = "otg";
+};
+
+&usb_1 {
+	compatible = "qcom,sa8797p-dwc3",
+		     "qcom,snps-dwc3";
+
+	power-domains = <&scmi1_pd 0>, <&scmi1_pd 1>;
+	power-domain-names = "transfer", "core";
+
+	phys = <&usb_1_eusbphy>,
+	       <&usb_1_qmpphy QMP_USB43DP_USB3_PHY>;
+	phy-names = "usb2-phy", "usb3-phy";
+
+	maximum-speed = "super-speed-plus";
+	dr_mode = "otg";
+	role-switch-default-mode = "host";
+};
+
+&usb_2 {
+	compatible = "qcom,sa8797p-dwc3",
+		     "qcom,snps-dwc3";
+
+	power-domains = <&scmi2_pd 0>, <&scmi2_pd 1>;
+	power-domain-names = "transfer", "core";
+
+	phys = <&usb_2_eusbphy>;
+	phy-names = "usb2-phy";
+
+	dr_mode = "otg";
+	role-switch-default-mode = "host";
 };
