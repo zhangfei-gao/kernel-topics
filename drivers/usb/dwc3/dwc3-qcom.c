@@ -16,6 +16,7 @@
 #include <linux/phy/phy.h>
 #include <linux/usb/of.h>
 #include <linux/reset.h>
+#include <linux/pm_domain.h>
 #include <linux/iopoll.h>
 #include <linux/usb/hcd.h>
 #include <linux/usb.h>
@@ -83,9 +84,52 @@ struct dwc3_qcom {
 	bool			pm_suspended;
 	struct icc_path		*icc_path_ddr;
 	struct icc_path		*icc_path_apps;
+	struct dev_pm_domain_list *pd_list;
+	bool			fw_managed;
 
 	enum usb_role		current_role;
 };
+
+struct dwc3_qcom_drvdata {
+	bool fw_managed;
+};
+
+static int dwc3_qcom_domain_attach(struct dwc3_qcom *qcom)
+{
+	struct dev_pm_domain_attach_data pd_data = {
+		.pd_flags = PD_FLAG_NO_DEV_LINK,
+		.pd_names = (const char *[]) { "transfer", "core" },
+		.num_pd_names = 2,
+	};
+	int ret;
+
+	ret = devm_pm_domain_attach_list(qcom->dev, &pd_data, &qcom->pd_list);
+	if (ret < 0)
+		return ret;
+
+	return qcom->pd_list ? 0 : -ENODEV;
+}
+
+static int dwc3_qcom_d3_to_d0(struct dwc3_qcom *qcom)
+{
+	int ret;
+
+	ret = pm_runtime_resume_and_get(qcom->pd_list->pd_devs[1]);
+	if (ret < 0)
+		return ret;
+
+	ret = pm_runtime_resume_and_get(qcom->pd_list->pd_devs[0]);
+	if (ret < 0)
+		pm_runtime_put_sync(qcom->pd_list->pd_devs[1]);
+
+	return ret;
+}
+
+static void dwc3_qcom_d0_to_d3(struct dwc3_qcom *qcom)
+{
+	pm_runtime_put_sync(qcom->pd_list->pd_devs[0]);
+	pm_runtime_put_sync(qcom->pd_list->pd_devs[1]);
+}
 
 #define to_dwc3_qcom(d) container_of((d), struct dwc3_qcom, dwc)
 
@@ -348,11 +392,14 @@ static int dwc3_qcom_suspend(struct dwc3_qcom *qcom, bool wakeup)
 		if (!(val & PWR_EVNT_LPM_IN_L2_MASK))
 			dev_err(qcom->dev, "port-%d HS-PHY not in L2\n", i + 1);
 	}
-	clk_bulk_disable_unprepare(qcom->num_clocks, qcom->clks);
+	if (!qcom->fw_managed) {
+		clk_bulk_disable_unprepare(qcom->num_clocks, qcom->clks);
 
-	ret = dwc3_qcom_interconnect_disable(qcom);
-	if (ret)
-		dev_warn(qcom->dev, "failed to disable interconnect: %d\n", ret);
+		ret = dwc3_qcom_interconnect_disable(qcom);
+		if (ret)
+			dev_warn(qcom->dev,
+				 "failed to disable interconnect: %d\n", ret);
+	}
 
 	/*
 	 * The role is stable during suspend as role switching is done from a
@@ -363,6 +410,9 @@ static int dwc3_qcom_suspend(struct dwc3_qcom *qcom, bool wakeup)
 			qcom->ports[i].usb2_speed = dwc3_qcom_read_usb2_speed(qcom, i);
 		dwc3_qcom_enable_interrupts(qcom);
 	}
+
+	if (qcom->fw_managed)
+		dwc3_qcom_d0_to_d3(qcom);
 
 	qcom->is_suspended = true;
 
@@ -377,16 +427,25 @@ static int dwc3_qcom_resume(struct dwc3_qcom *qcom, bool wakeup)
 	if (!qcom->is_suspended)
 		return 0;
 
+	if (qcom->fw_managed) {
+		ret = dwc3_qcom_d3_to_d0(qcom);
+		if (ret)
+			return ret;
+	}
+
 	if (dwc3_qcom_is_host(qcom) && wakeup)
 		dwc3_qcom_disable_interrupts(qcom);
 
-	ret = clk_bulk_prepare_enable(qcom->num_clocks, qcom->clks);
-	if (ret < 0)
-		return ret;
+	if (!qcom->fw_managed) {
+		ret = clk_bulk_prepare_enable(qcom->num_clocks, qcom->clks);
+		if (ret < 0)
+			return ret;
 
-	ret = dwc3_qcom_interconnect_enable(qcom);
-	if (ret)
-		dev_warn(qcom->dev, "failed to enable interconnect: %d\n", ret);
+		ret = dwc3_qcom_interconnect_enable(qcom);
+		if (ret)
+			dev_warn(qcom->dev,
+				 "failed to enable interconnect: %d\n", ret);
+	}
 
 	/* Clear existing events from PHY related to L2 in/out */
 	for (i = 0; i < qcom->num_ports; i++) {
@@ -609,6 +668,7 @@ static struct dwc3_glue_ops dwc3_qcom_glue_ops = {
 
 static int dwc3_qcom_probe(struct platform_device *pdev)
 {
+	const struct dwc3_qcom_drvdata *data;
 	struct dwc3_probe_data	probe_data = {};
 	struct device		*dev = &pdev->dev;
 	struct dwc3_qcom	*qcom;
@@ -623,35 +683,49 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	qcom->dev = &pdev->dev;
+	data = device_get_match_data(dev);
+	qcom->fw_managed = data && data->fw_managed;
 
-	qcom->resets = devm_reset_control_array_get_optional_exclusive(dev);
-	if (IS_ERR(qcom->resets)) {
-		return dev_err_probe(&pdev->dev, PTR_ERR(qcom->resets),
-				     "failed to get resets\n");
+	if (qcom->fw_managed) {
+		ret = dwc3_qcom_domain_attach(qcom);
+		if (ret < 0)
+			return dev_err_probe(dev, ret,
+					     "failed to attach power domains\n");
+
+		ret = dwc3_qcom_d3_to_d0(qcom);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					     "failed to transition to D0\n");
+	} else {
+		qcom->resets = devm_reset_control_array_get_optional_exclusive(dev);
+		if (IS_ERR(qcom->resets)) {
+			return dev_err_probe(dev, PTR_ERR(qcom->resets),
+					     "failed to get resets\n");
+		}
+
+		ret = devm_clk_bulk_get_all(dev, &qcom->clks);
+		if (ret < 0)
+			return dev_err_probe(dev, ret, "failed to get clocks\n");
+		qcom->num_clocks = ret;
+
+		ret = reset_control_assert(qcom->resets);
+		if (ret) {
+			dev_err(dev, "failed to assert resets, err=%d\n", ret);
+			return ret;
+		}
+
+		usleep_range(10, 1000);
+
+		ret = reset_control_deassert(qcom->resets);
+		if (ret) {
+			dev_err(dev, "failed to deassert resets, err=%d\n", ret);
+			return ret;
+		}
+
+		ret = clk_bulk_prepare_enable(qcom->num_clocks, qcom->clks);
+		if (ret < 0)
+			return ret;
 	}
-
-	ret = devm_clk_bulk_get_all(&pdev->dev, &qcom->clks);
-	if (ret < 0)
-		return dev_err_probe(dev, ret, "failed to get clocks\n");
-	qcom->num_clocks = ret;
-
-	ret = reset_control_assert(qcom->resets);
-	if (ret) {
-		dev_err(&pdev->dev, "failed to assert resets, err=%d\n", ret);
-		return ret;
-	}
-
-	usleep_range(10, 1000);
-
-	ret = reset_control_deassert(qcom->resets);
-	if (ret) {
-		dev_err(&pdev->dev, "failed to deassert resets, err=%d\n", ret);
-		return ret;
-	}
-
-	ret = clk_bulk_prepare_enable(qcom->num_clocks, qcom->clks);
-	if (ret < 0)
-		return ret;
 
 	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!r) {
@@ -711,9 +785,11 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 		goto clk_disable;
 	}
 
-	ret = dwc3_qcom_interconnect_init(qcom);
-	if (ret)
-		goto remove_core;
+	if (!qcom->fw_managed) {
+		ret = dwc3_qcom_interconnect_init(qcom);
+		if (ret)
+			goto remove_core;
+	}
 
 	wakeup_source = of_property_read_bool(dev->of_node, "wakeup-source");
 	device_init_wakeup(&pdev->dev, wakeup_source);
@@ -725,7 +801,10 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 remove_core:
 	dwc3_core_remove(&qcom->dwc);
 clk_disable:
-	clk_bulk_disable_unprepare(qcom->num_clocks, qcom->clks);
+	if (qcom->fw_managed)
+		dwc3_qcom_d0_to_d3(qcom);
+	else
+		clk_bulk_disable_unprepare(qcom->num_clocks, qcom->clks);
 
 	return ret;
 }
@@ -739,8 +818,12 @@ static void dwc3_qcom_remove(struct platform_device *pdev)
 		return;
 
 	dwc3_core_remove(&qcom->dwc);
-	clk_bulk_disable_unprepare(qcom->num_clocks, qcom->clks);
-	dwc3_qcom_interconnect_exit(qcom);
+	if (qcom->fw_managed) {
+		dwc3_qcom_d0_to_d3(qcom);
+	} else {
+		clk_bulk_disable_unprepare(qcom->num_clocks, qcom->clks);
+		dwc3_qcom_interconnect_exit(qcom);
+	}
 
 	pm_runtime_put_noidle(qcom->dev);
 }
@@ -838,8 +921,17 @@ static const struct dev_pm_ops dwc3_qcom_dev_pm_ops = {
 	.prepare = pm_sleep_ptr(dwc3_qcom_prepare),
 };
 
+static const struct dwc3_qcom_drvdata dwc3_qcom_data = {};
+
+static const struct dwc3_qcom_drvdata sa8797p_dwc3_qcom_data = {
+	.fw_managed = true,
+};
+
 static const struct of_device_id dwc3_qcom_of_match[] = {
-	{ .compatible = "qcom,snps-dwc3" },
+	{ .compatible = "qcom,sa8797p-dwc3",
+	  .data = &sa8797p_dwc3_qcom_data },
+	{ .compatible = "qcom,snps-dwc3",
+	  .data = &dwc3_qcom_data },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, dwc3_qcom_of_match);
