@@ -75,6 +75,7 @@ properties:
         - qcom,qcs404-ethqos
         - qcom,nord-ethqos
         - qcom,sa8255p-ethqos
+        - qcom,sa8797p-ethqos
         - qcom,sa8775p-ethqos
         - qcom,sc8280xp-ethqos
         - qcom,sm8150-ethqos
@@ -190,7 +191,7 @@ properties:
 
   power-domains:
     minItems: 1
-    maxItems: 2
+    maxItems: 4
 
   mac-mode:
     $ref: ethernet-controller.yaml#/properties/phy-connection-type
@@ -550,6 +551,16 @@ allOf:
         compatible:
           not:
             contains:
+              const: qcom,sa8797p-ethqos
+    then:
+      properties:
+        power-domains:
+          maxItems: 2
+  - if:
+      properties:
+        compatible:
+          not:
+            contains:
               enum:
                 - allwinner,sun7i-a20-gmac
                 - allwinner,sun8i-a83t-emac
@@ -568,6 +579,7 @@ allOf:
                 - qcom,qcs404-ethqos
                 - qcom,nord-ethqos
                 - qcom,sa8255p-ethqos
+                - qcom,sa8797p-ethqos
                 - qcom,sa8775p-ethqos
                 - qcom,sc8280xp-ethqos
                 - qcom,sm8150-ethqos
