@@ -20,7 +20,22 @@ allOf:
       properties:
         compatible:
           contains:
-            const: qcom,nord-ethqos
+            enum:
+              - qcom,nord-ethqos
+              - qcom,sa8797p-ethqos
+    then:
+      properties:
+        iommus:
+          minItems: 10
+          maxItems: 10
+    else:
+      properties:
+        iommus:
+          maxItems: 1
+  - if:
+      properties:
+        compatible:
+          const: qcom,nord-ethqos
     then:
       properties:
         clocks:
@@ -29,15 +44,33 @@ allOf:
         clock-names:
           minItems: 5
           maxItems: 5
+      required:
+        - power-domains
+  - if:
+      properties:
+        compatible:
+          const: qcom,sa8797p-ethqos
+    then:
+      properties:
         iommus:
           minItems: 10
           maxItems: 10
+        power-domains:
+          minItems: 4
+          maxItems: 4
+        power-domain-names:
+          items:
+            - const: power_core
+            - const: power_mdio
+            - const: perf_serdes
+            - const: perf_5g_serdes
       required:
         - power-domains
+        - power-domain-names
     else:
-      properties:
-        iommus:
-          maxItems: 1
+      required:
+        - clocks
+        - clock-names
 
 properties:
   compatible:
@@ -53,6 +86,7 @@ properties:
       - enum:
           - qcom,qcs404-ethqos
           - qcom,nord-ethqos
+          - qcom,sa8797p-ethqos
           - qcom,sa8775p-ethqos
           - qcom,sc8280xp-ethqos
           - qcom,sm8150-ethqos
@@ -122,12 +156,11 @@ properties:
     const: serdes
 
   power-domains:
-    maxItems: 1
+    minItems: 1
+    maxItems: 4
 
 required:
   - compatible
-  - clocks
-  - clock-names
   - reg-names
 
 unevaluatedProperties: false
