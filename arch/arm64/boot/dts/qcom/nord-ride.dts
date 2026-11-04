@@ -45,6 +45,14 @@
 	status = "okay";
 };
 
+&scmi5 {
+	status = "okay";
+};
+
+&scmi6 {
+	status = "okay";
+};
+
 &scmi7 {
 	status = "okay";
 };
@@ -69,7 +77,23 @@
 	status = "okay";
 };
 
+&scmi32 {
+	status = "okay";
+};
+
+&scmi33 {
+	status = "okay";
+};
+
 &spi16 {
+	status = "okay";
+};
+
+&pcie0_fw {
+	status = "okay";
+};
+
+&pcie1_fw {
 	status = "okay";
 };
 

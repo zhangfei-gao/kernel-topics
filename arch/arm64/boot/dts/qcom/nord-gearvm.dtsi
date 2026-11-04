@@ -2847,6 +2847,136 @@
 	power-domains = <&scmi3_pd 0>;
 };
 
+/ {
+	pcie0_fw: pci@5000000000 {
+		compatible = "qcom,pcie-sa8797p";
+		reg = <0x50 0x00000000 0x0 0x10000000>;
+		device_type = "pci";
+
+		#address-cells = <3>;
+		#size-cells = <2>;
+
+		ranges = <0x01000000 0x0 0x40000000 0x0 0x40000000 0x0 0x100000>,
+			 <0x02000000 0x0 0x40100000 0x0 0x40100000 0x0 0x7000000>,
+			 <0x43000000 0x50 0x10100000 0x50 0x10100000 0x8 0x00000000>;
+		bus-range = <0x00 0xff>;
+		linux,pci-domain = <0>;
+
+		#interrupt-cells = <1>;
+		interrupt-map-mask = <0 0 0 0x7>;
+		interrupt-map = <0 0 0 1 &intc 0 0 0 149 IRQ_TYPE_LEVEL_HIGH>,
+				<0 0 0 2 &intc 0 0 0 150 IRQ_TYPE_LEVEL_HIGH>,
+				<0 0 0 3 &intc 0 0 0 151 IRQ_TYPE_LEVEL_HIGH>,
+				<0 0 0 4 &intc 0 0 0 152 IRQ_TYPE_LEVEL_HIGH>;
+
+		dma-coherent;
+		iommu-map = <0x000 &pcie_smmu 0x0000 0x1>,
+			    <0x100 &pcie_smmu 0x0100 0x1>,
+			    <0x200 &pcie_smmu 0x0200 0x1>,
+			    <0x300 &pcie_smmu 0x0300 0x1>;
+		msi-map = <0x0 &gic_its 0x80000 0x10000>;
+		power-domains = <&scmi5_pd 0>;
+
+		status = "disabled";
+	};
+
+	pcie1_fw: pci@4800000000 {
+		compatible = "qcom,pcie-sa8797p";
+		reg = <0x48 0x00000000 0x0 0x10000000>;
+		device_type = "pci";
+
+		#address-cells = <3>;
+		#size-cells = <2>;
+
+		ranges = <0x01000000 0x0 0x50000000 0x0 0x50000000 0x0 0x100000>,
+			 <0x02000000 0x0 0x50100000 0x0 0x50100000 0x0 0x7000000>,
+			 <0x43000000 0x48 0x10100000 0x48 0x10100000 0x4 0x00000000>;
+		bus-range = <0x00 0xff>;
+		linux,pci-domain = <1>;
+
+		#interrupt-cells = <1>;
+		interrupt-map-mask = <0 0 0 0x7>;
+		interrupt-map = <0 0 0 1 &intc 0 0 0 835 IRQ_TYPE_LEVEL_HIGH>,
+				<0 0 0 2 &intc 0 0 0 351 IRQ_TYPE_LEVEL_HIGH>,
+				<0 0 0 3 &intc 0 0 0 830 IRQ_TYPE_LEVEL_HIGH>,
+				<0 0 0 4 &intc 0 0 0 348 IRQ_TYPE_LEVEL_HIGH>;
+
+		dma-coherent;
+		iommu-map = <0x000 &pcie_smmu 0x10000 0x1>,
+			    <0x100 &pcie_smmu 0x10100 0x1>,
+			    <0x200 &pcie_smmu 0x10200 0x1>,
+			    <0x300 &pcie_smmu 0x10300 0x1>;
+		msi-map = <0x0 &gic_its 0x90000 0x10000>;
+		power-domains = <&scmi6_pd 0>;
+
+		status = "disabled";
+	};
+
+	pcie2_fw: pci@4000000000 {
+		compatible = "qcom,pcie-sa8797p";
+		reg = <0x40 0x00000000 0x0 0x10000000>;
+		device_type = "pci";
+
+		#address-cells = <3>;
+		#size-cells = <2>;
+
+		ranges = <0x01000000 0x0 0x60000000 0x0 0x60000000 0x0 0x100000>,
+			 <0x02000000 0x0 0x60100000 0x0 0x60100000 0x0 0x7000000>,
+			 <0x43000000 0x40 0x10100000 0x40 0x10100000 0x4 0x00000000>;
+		bus-range = <0x00 0xff>;
+		linux,pci-domain = <2>;
+
+		#interrupt-cells = <1>;
+		interrupt-map-mask = <0 0 0 0x7>;
+		interrupt-map = <0 0 0 1 &intc 0 0 0 263 IRQ_TYPE_LEVEL_HIGH>,
+				<0 0 0 2 &intc 0 0 0 154 IRQ_TYPE_LEVEL_HIGH>,
+				<0 0 0 3 &intc 0 0 0 110 IRQ_TYPE_LEVEL_HIGH>,
+				<0 0 0 4 &intc 0 0 0 258 IRQ_TYPE_LEVEL_HIGH>;
+
+		dma-coherent;
+		iommu-map = <0x000 &pcie_smmu 0x20000 0x1>,
+			    <0x100 &pcie_smmu 0x20100 0x1>,
+			    <0x200 &pcie_smmu 0x20200 0x1>,
+			    <0x300 &pcie_smmu 0x20300 0x1>;
+		msi-map = <0x0 &gic_its 0xa0000 0x10000>;
+		power-domains = <&scmi32_pd 0>;
+
+		status = "disabled";
+	};
+
+	pcie3_fw: pci@400000000 {
+		compatible = "qcom,pcie-sa8797p";
+		reg = <0x4 0x00000000 0x0 0x10000000>;
+		device_type = "pci";
+
+		#address-cells = <3>;
+		#size-cells = <2>;
+
+		ranges = <0x01000000 0x0 0x70000000 0x0 0x70000000 0x0 0x100000>,
+			 <0x02000000 0x0 0x70100000 0x0 0x70100000 0x0 0x7000000>,
+			 <0x43000000 0x4 0x10100000 0x4 0x10100000 0x0 0x80000000>;
+		bus-range = <0x00 0xff>;
+		linux,pci-domain = <3>;
+
+		#interrupt-cells = <1>;
+		interrupt-map-mask = <0 0 0 0x7>;
+		interrupt-map = <0 0 0 1 &intc 0 0 0 111 IRQ_TYPE_LEVEL_HIGH>,
+				<0 0 0 2 &intc 0 0 0 246 IRQ_TYPE_LEVEL_HIGH>,
+				<0 0 0 3 &intc 0 0 0 239 IRQ_TYPE_LEVEL_HIGH>,
+				<0 0 0 4 &intc 0 0 0 234 IRQ_TYPE_LEVEL_HIGH>;
+
+		dma-coherent;
+		iommu-map = <0x000 &pcie_smmu 0x30000 0x1>,
+			    <0x100 &pcie_smmu 0x30100 0x1>,
+			    <0x200 &pcie_smmu 0x30200 0x1>,
+			    <0x300 &pcie_smmu 0x30300 0x1>;
+		msi-map = <0x0 &gic_its 0xb0000 0x10000>;
+		power-domains = <&scmi33_pd 0>;
+
+		status = "disabled";
+	};
+};
+
 &ethernet0 {
 	compatible = "qcom,sa8797p-ethqos";
 
