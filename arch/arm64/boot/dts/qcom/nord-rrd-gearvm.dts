@@ -59,6 +59,14 @@
 	status = "okay";
 };
 
+&scmi5 {
+	status = "okay";
+};
+
+&scmi6 {
+	status = "okay";
+};
+
 &scmi7 {
 	status = "okay";
 };
@@ -84,6 +92,14 @@
 };
 
 &scmi13 {
+	status = "okay";
+};
+
+&scmi32 {
+	status = "okay";
+};
+
+&scmi33 {
 	status = "okay";
 };
 
@@ -125,6 +141,22 @@
 			#interrupt-cells = <2>;
 		};
 	};
+};
+
+&pcie0_fw {
+	status = "okay";
+};
+
+&pcie1_fw {
+	status = "okay";
+};
+
+&pcie2_fw {
+	status = "okay";
+};
+
+&pcie3_fw {
+	status = "okay";
 };
 
 &ethernet0 {
