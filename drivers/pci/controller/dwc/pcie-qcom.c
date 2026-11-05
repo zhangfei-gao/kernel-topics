@@ -2309,11 +2309,27 @@ static int qcom_pcie_probe(struct platform_device *pdev)
 		bridge->ops = (struct pci_ops *)&pci_qcom_ecam_ops.pci_ops;
 		bridge->msi_domain = true;
 
+		ret = pci_pwrctrl_create_devices(dev);
+		if (ret)
+			goto err_fw_pwrctrl_destroy;
+
+		ret = pci_pwrctrl_power_on_devices(dev);
+		if (ret)
+			goto err_fw_pwrctrl_destroy;
+
 		ret = pci_host_probe(bridge);
 		if (ret)
-			goto err_pm_runtime_put;
+			goto err_fw_pwrctrl_power_off;
 
 		return 0;
+
+err_fw_pwrctrl_power_off:
+		pci_pwrctrl_power_off_devices(dev);
+err_fw_pwrctrl_destroy:
+		if (ret != -EPROBE_DEFER)
+			pci_pwrctrl_destroy_devices(dev);
+
+		goto err_pm_runtime_put;
 	}
 
 	pcie = devm_kzalloc_obj(dev, *pcie);
