@@ -182,6 +182,11 @@ xpcs_find_compat(struct dw_xpcs *xpcs, phy_interface_t interface)
 	return NULL;
 }
 
+static bool xpcs_is_qcom_nord(struct dw_xpcs *xpcs)
+{
+	return xpcs->desc && xpcs->desc->id == QCOM_NORD_XPCS_ID;
+}
+
 struct phylink_pcs *xpcs_to_phylink_pcs(struct dw_xpcs *xpcs)
 {
 	return &xpcs->pcs;
@@ -1607,6 +1612,10 @@ static const struct dw_xpcs_compat qcom_nord_xpcs_compat[] = {
 		.supported = xpcs_usxgmii_features,
 		.an_mode = DW_AN_C37_USXGMII,
 	}, {
+		.interface = PHY_INTERFACE_MODE_10GBASER,
+		.supported = xpcs_10gbaser_features,
+		.an_mode = DW_10GBASER,
+	}, {
 	}
 };
 
@@ -1753,7 +1762,8 @@ static struct dw_xpcs *xpcs_create(struct mdio_device *mdiodev)
 	if (xpcs->info.pma == WX_TXGBE_XPCS_PMA_10G_ID ||
 	    xpcs->info.pma == MP_FBNIC_XPCS_PMA_100G_ID)
 		xpcs->pcs.poll = false;
-	else
+	else if (!xpcs_is_qcom_nord(xpcs))
+		/* Reset on link-up causes RBU on Qualcomm XPCS hardware. */
 		xpcs->need_reset = true;
 
 	return xpcs;
