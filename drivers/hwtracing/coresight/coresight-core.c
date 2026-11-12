@@ -2125,8 +2125,10 @@ static int __init coresight_init(void)
 		goto exit_notifier;
 
 	ret = coresight_pm_setup();
-	if (!ret)
+	if (!ret) {
+		/* msleep(50); */
 		return 0;
+	}
 
 	cscfg_exit();
 exit_notifier:
