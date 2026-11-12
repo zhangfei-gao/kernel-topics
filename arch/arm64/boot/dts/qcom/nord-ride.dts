@@ -45,6 +45,14 @@
 	status = "okay";
 };
 
+&scmi7 {
+	status = "okay";
+};
+
+&scmi8 {
+	status = "okay";
+};
+
 &scmi9 {
 	status = "okay";
 };
@@ -63,6 +71,17 @@
 
 &spi16 {
 	status = "okay";
+};
+
+&ethernet0 {
+	phy-mode = "10gbase-r";
+
+	status = "okay";
+
+	fixed-link {
+		speed = <10000>;
+		full-duplex;
+	};
 };
 
 &thermal_zones {
@@ -250,6 +269,10 @@
 };
 
 &ufs_mem_hc {
+	status = "okay";
+};
+
+&xpcs0 {
 	status = "okay";
 };
 

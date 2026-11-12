@@ -2846,3 +2846,55 @@
 		     "qcom,sa8255p-ufshc";
 	power-domains = <&scmi3_pd 0>;
 };
+
+&ethernet0 {
+	compatible = "qcom,sa8797p-ethqos";
+
+	power-domains = <&scmi7_pd 0>, <&scmi7_pd 1>,
+			<&scmi7_dvfs 0>, <&scmi7_dvfs 1>;
+	power-domain-names = "power_core", "power_mdio",
+			     "perf_serdes", "perf_5g_serdes";
+};
+
+&ethernet1 {
+	compatible = "qcom,sa8797p-ethqos";
+
+	power-domains = <&scmi8_pd 0>, <&scmi8_pd 1>,
+			<&scmi8_dvfs 0>, <&scmi8_dvfs 1>;
+	power-domain-names = "power_core", "power_mdio",
+			     "perf_serdes", "perf_5g_serdes";
+};
+
+&tlmm {
+	ethernet0_default: ethernet0-default-state {
+		ethernet0-mdc-pins {
+			pins = "gpio47";
+			function = "emac0_mdc";
+			drive-strength = <16>;
+			bias-pull-up;
+		};
+
+		ethernet0-mdio-pins {
+			pins = "gpio48";
+			function = "emac0_mdio";
+			drive-strength = <16>;
+			bias-pull-up;
+		};
+	};
+
+	ethernet1_default: ethernet1-default-state {
+		ethernet1-mdc-pins {
+			pins = "gpio49";
+			function = "emac1_mdc";
+			drive-strength = <16>;
+			bias-pull-up;
+		};
+
+		ethernet1-mdio-pins {
+			pins = "gpio50";
+			function = "emac1_mdio";
+			drive-strength = <16>;
+			bias-pull-up;
+		};
+	};
+};
