@@ -1019,8 +1019,17 @@ static int ethqos_clks_config(void *priv, bool enabled)
 	struct qcom_ethqos *ethqos = priv;
 	int ret = 0;
 
-	if (ethqos->use_domains)
-		return qcom_ethqos_domain_transition_d0d1(ethqos, enabled);
+	if (ethqos->use_domains) {
+		ret = qcom_ethqos_domain_transition_d0d1(ethqos, enabled);
+		if (ret || !enabled)
+			return ret;
+
+		if (ethqos->set_sgmii_loopback)
+			ethqos->set_sgmii_loopback(ethqos, true);
+		ethqos_set_func_clk_en(ethqos);
+
+		return 0;
+	}
 
 	if (enabled) {
 		ret = clk_prepare_enable(ethqos->link_clk);
